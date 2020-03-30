@@ -1,0 +1,13 @@
+name = "SeisDvv"
+uuid = "7496752f-774b-4904-a0f2-f9837ec78c00"
+authors = ["Tim Clements <thclements@g.harvard.edu>"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
