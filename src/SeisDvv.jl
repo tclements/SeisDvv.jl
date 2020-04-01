@@ -1,5 +1,9 @@
 module SeisDvv
 
-greet() = print("Hello World!")
+using GLM, FFTW, Interpolations, SeisNoise
 
-end # module
+include("VelocityChange/MWCS.jl")
+include("VelocityChange/Stretching.jl")
+include("VelocityChange/Wavelets.jl")
+
+end 
