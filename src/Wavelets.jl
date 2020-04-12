@@ -22,7 +22,7 @@ Perform time-domain dv/v algorithms after cwt, frequency selection, and icwt.
 `dvv::AbstractArray`: dv/v values for each frequency band
 `err::AbstractArray`: errors in dv/v measurements
 """
-function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::AbstractArray, freqbands::AbstractArray, dj::AbstractFloat; method::String="stretching", normalize::Bool=true)
+function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::AbstractArray, freqbands::AbstractArray; dj::AbstractFloat=1/12, method::String="stretching", normalize::Bool=true)
     # define sample frequency
     dt = t[2] - t[1]
     fs = 1/dt
