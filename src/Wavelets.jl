@@ -1,6 +1,5 @@
-using Wavelets, GLM
+using GLM
 export applyOverFrequencies, cwt, icwt, wts_dvv
-
 
 """
     waveletMethodDvv(cur, ref, t, twindow, freqbands, dj, s0, J)
@@ -14,8 +13,6 @@ Perform time-domain dv/v algorithms after cwt, frequency selection, and icwt.
 `twindow::AbstractArray`: Times over which to compute dv/v
 `freqbands::AbstractArray`: Frequency bands over which to compute dv/v
 `dj::AbstractFloat`: Spacing between discrete scales. Default value is 1/12
-`s0`: Lowest resolvable scale
-`J`: Total number of scales
 `method::String`: 'stretching' or 'dtw'
 `normalize::Bool`: Whether or not to normalize signals before dv/v
 ``
@@ -25,17 +22,13 @@ Perform time-domain dv/v algorithms after cwt, frequency selection, and icwt.
 `dvv::AbstractArray`: dv/v values for each frequency band
 `err::AbstractArray`: errors in dv/v measurements
 """
-function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::AbstractArray, freqbands::AbstractArray, dj::AbstractFloat, s0, J; method::String="stretching", normalize::Bool=true)
+function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::AbstractArray, freqbands::AbstractArray, dj::AbstractFloat; method::String="stretching", normalize::Bool=true)
     # define sample frequency
     dt = t[2] - t[1]
     fs = 1/dt
 
-    # apply cwt to two traces
-    # define wavelet
-    wav = WT.Morlet(6)
-    # calculate the CWT of the time series, using identical parameters for both calculations
-    cwt1, sj, freqs, coi = cwt(cur, CFW(wav,1/dj), J1=J, dt=dt, s0=s0)
-    cwt2, sj, freqs, coi = cwt(ref, CFW(wav,1/dj), J1=J, dt=dt, s0=s0)
+    cwt1, sj, freqs, coi = cwt(cur, dt, minimum(freqbands), maximum(freqbands))
+    cwt2, sj, freqs, coi = cwt(ref, dt, minimum(freqbands), maximum(freqbands))
 
     # if a frequency window is given (instead of a set of frequency bands), we assume
     # dv/v should be calculated for each frequency. We construct a 2D array of the
@@ -64,8 +57,8 @@ function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, t
         end
 
         # perform icwt
-        icwt1 = Wavelets.Transforms.icwt(cwt1[freq_ind, :], CFW(wav,1/dj), sj[freq_ind], dt=dt, dj=dj)
-        icwt2 = Wavelets.Transforms.icwt(cwt2[freq_ind, :], CFW(wav,1/dj), sj[freq_ind], dt=dt, dj=dj)
+        icwt1 = icwt(cwt1[:,freq_ind], sj, dt)
+        icwt2 = icwt(cwt2[:,freq_ind], sj, dt)
 
         # get times over which we apply dv/v algorithm
         tmin = twindow[1]
@@ -113,75 +106,8 @@ function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, t
     return freqbands, -dvv, err
 end
 
-#=
+
 """
-  wts_dvv(ref,cur,t,window,freqmin,freqmax)
-
-dv/v with stretching method from continuous wavelet transformation.
-
-This function uses the stretching method at each frequency from the
-continuous wavelet transform to compare the Reference waveform to the current
-waveform to get the relative seismic velocity variation (and associated error).
-
-# Arguments
-- `ref::AbstractArray`: Reference correlation.
-- `cur::AbstractArray`: Current correlation.
-- `t::AbstractArray`: time vector, common to both `ref` and `cur`.
-- `window::AbstractArray`: vector of the indices of the `cur` and `ref` windows
-                          on which you want to do the measurements
-- `freqmin::Float64`: minimum frequency in the correlation [Hz]
-- `freqmax::Float64`: maximum frequency in the correlation [Hz]
-- `f0::Real`: Nondimensional frequency from Torrence & Campo, 1998 eq. 1 [Hz].
-- `dj::AbstractFloat`: Spacing between discrete scales. Default value is 1/12.
-- `standardize::Bool`: Remove mean and std from wavelet spectrum or not.
-
-# Returns
-- `dvv::AbstactArray`: Relative Velocity Change dv/v (in %)
-- `err::AbstractArray`: Errors in the dv/v measurements
-
-Originally written in python by Congcong Yuan (30 Jun, 2019)
-"""
-function wts_dvv(ref,cur,t,window,freqmin,freqmax;f0=6,dj=1/12,
-               standardize=true,ntrial=50,dvmin=-0.03,dvmax=0.03)
-
-    T = eltype(ref)
-    dt = mean(diff(t))
-    # apply cwt on two traces
-    cwt1,sj,freqs,coi = cwt(ref,dt,freqmin,freqmax, f0=f0,dj=dj)
-    cwt2,sj,freqs,coi = cwt(cur,dt,freqmin,freqmax, f0=f0,dj=dj)
-
-    # Use DTW method to extract dvv
-    Nfreq = length(freqs)
-    dvv = zeros(T,Nfreq)
-    err = zeros(T,Nfreq)
-
-    for ii = 1:Nfreq
-        icwt1 = icwt(cwt1[:,ii],sj[ii],dt)
-        icwt2 = icwt(cwt2[:,ii],sj[ii],dt)
-
-        if standardize
-            standardize!(icwt1)
-            standardize!(icwt2)
-        end
-
-        # find cone of influence
-        indcoi = findall(freqs[ii] .>= 1. ./coi)
-        indt = findall(x->x in indcoi, window)
-
-        if length(indt) == 0
-            continue
-        end
-
-        # calculate dvv with stretching
-        dvv[ii], cc,cdp, ep, err[ii],allC = stretching(icwt1, icwt2,t,window[indt],
-               freqmin,freqmax,ntrial=ntrial,dvmin=dvmin,dvmax=dvmax)
-    end
-    return dvv, err, freqs
-end
-=#
-#=
-"""
-
   cwt(signal,dt,freqmin,freqmax)
 
 Continuous wavelet transform of the signal at specified scales.
@@ -308,4 +234,3 @@ end
 function psi_ft(A::AbstractArray{T},f0::Real) where T <: AbstractFloat
     return exp.(T(-0.5) .* (A .- T(f0)) .^2) .* T(π ^ -0.25)
 end
-=#
