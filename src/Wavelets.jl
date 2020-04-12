@@ -1,75 +1,120 @@
-export cwt, icwt, wts_dvv
+using Wavelets, GLM
+export applyOverFrequencies, cwt, icwt, wts_dvv
 
-# """
-#
-#   wtdtw(ref,cur,t,window,freqmin,freqmax)
-#
-# dv/v with dynamic time warping method from continuous wavelet transformation.
-#
-# This function uses the dynamic time warping method at each frequency from the
-# continuous wavelet transform to compare the Reference waveform to the current
-# waveform to get the relative seismic velocity variation (and associated error).
-#
-# # Arguments
-# - `ref::AbstractArray`: Reference correlation.
-# - `cur::AbstractArray`: Current correlation.
-# - `t::AbstractArray`: time vector, common to both `ref` and `cur`.
-# - `window::AbstractArray`: vector of the indices of the `cur` and `ref` windows
-#                           on which you want to do the measurements
-# - `freqmin::Float64`: minimum frequency in the correlation [Hz]
-# - `freqmax::Float64`: maximum frequency in the correlation [Hz]
-# - `maxlag::Int64`: number of maxlag id to search the distance.
-# - `b::Int64`: value to control in distance calculation algorithm (see Mikesell et al. 2015).
-# - `direction::Int64`: direction to accumulate errors (1=forward, -1=backward, 0=double to smooth)
-# - `f0::Real`: Nondimensional frequency from Torrence & Campo, 1998 eq. 1 [Hz].
-# - `dj::AbstractFloat`: Spacing between discrete scales. Default value is 1/12.
-# - `standardize::Bool`: Remove mean and std from wavelet spectrum or not.
-#
-# # Returns
-# - `dvv::AbstactArray`: Relative Velocity Change dv/v (in %)
-# - `err::AbstractArray`: Errors in the dv/v measurements
-#
-# Originally written in python by Congcong Yuan (30 Jun, 2019)
-# """
-# function wtdtw(ref,cur,t,window,freqmin,freqmax;maxlag=80,b=1,direction=1,f0=6,dj=1/12,
-#                standardize=true)
-#
-#     T = eltype(ref)
-#     dt = mean(diff(t))
-#     # apply cwt on two traces
-#     cwt1,sj,freqs,coi = cwt(ref,dt,freqmin,freqmax, f0=f0,dj=dj)
-#     cwt2,sj,freqs,coi = cwt(cur,dt,freqmin,freqmax, f0=f0,dj=dj)
-#
-#     # extract real values of cwt
-#     rcwt1, rcwt2 = real.(cwt1), real.(cwt2)
-#
-#     # Use DTW method to extract dvv
-#     Nfreq = length(freqs)
-#     dvv = zeros(T,Nfreq)
-#     err = zeros(T,Nfreq)
-#
-#     if standardize
-#         standardize!(rcwt1)
-#         standardize!(rcwt2)
-#     end
-#
-#     for ii = 1:Nfreq
-#
-#         # find cone of influence
-#         indcoi = findall(freqs[ii] .>= 1. ./coi)
-#         indt = findall(x->x in indcoi, window)
-#
-#         if length(indt) == 0
-#             continue
-#         end
-#
-#         dvv[ii], err[ii] = dtw_dvv(rcwt1[window[indt],ii], rcwt2[window[indt],ii],t[window[indt]],maxlag, b, direction)
-#     end
-#     return dvv, err, freqs
-# end
 
 """
+    waveletMethodDvv(cur, ref, t, twindow, freqbands, dj, s0, J)
 
+Perform time-domain dv/v algorithms after cwt, frequency selection, and icwt.
+
+# Arguments
+`cur::AbstractArray`: Input signal
+`ref::AbstractArray`: Reference signal
+`t::AbstractArray`: Time vector
+`twindow::AbstractArray`: Times over which to compute dv/v
+`freqbands::AbstractArray`: Frequency bands over which to compute dv/v
+`dj::AbstractFloat`: Spacing between discrete scales. Default value is 1/12
+`s0`: Lowest resolvable scale
+`J`: Total number of scales
+`method::String`: 'stretching' or 'dtw'
+`normalize::Bool`: Whether or not to normalize signals before dv/v
+``
+
+# Returns
+`freqbands::AbstractArray`: fmin and fmax for each iteration of the dv/v algorithm
+`dvv::AbstractArray`: dv/v values for each frequency band
+`err::AbstractArray`: errors in dv/v measurements
+"""
+function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::AbstractArray, freqbands::AbstractArray, dj::AbstractFloat, s0, J; method::String="stretching", normalize::Bool=true)
+    # define sample frequency
+    dt = t[2] - t[1]
+    fs = 1/dt
+
+    # apply cwt to two traces
+    # define wavelet
+    wav = WT.Morlet(6)
+    # calculate the CWT of the time series, using identical parameters for both calculations
+    cwt1, sj, freqs, coi = cwt(cur, CFW(wav,1/dj), J1=J, dt=dt, s0=s0)
+    cwt2, sj, freqs, coi = cwt(ref, CFW(wav,1/dj), J1=J, dt=dt, s0=s0)
+
+    # if a frequency window is given (instead of a set of frequency bands), we assume
+    # dv/v should be calculated for each frequency. We construct a 2D array of the
+    # form [f1 f1; f2 f2; ...], which can be treated the same as a 2D array of frequency bands
+    if ndims(freqbands)==1
+        freqbands = hcat(freqs, freqs)
+    end
+    # number of frequency bands
+    (nbands,_) = size(freqbands)
+
+    # initialize dvv and err arrays
+    dvv = zeros(nbands)
+    err = zeros(nbands)
+
+    # loop over frequency bands
+    for iband=1:nbands
+        println(iband)
+        (fmin, fmax) = freqbands[iband, :]
+
+        # get current frequencies over which we apply icwt
+        # frequency checks
+        if (fmax > maximum(freqs) || fmax < fmin)
+            println("Error: please ensure columns 1 and 2 are right frequency limits in freqbands!")
+        else
+            freq_ind = findall(f->(f>=fmin && f<=fmax), freqs)
+        end
+
+        # perform icwt
+        icwt1 = Wavelets.Transforms.icwt(cwt1[freq_ind, :], CFW(wav,1/dj), sj[freq_ind], dt=dt, dj=dj)
+        icwt2 = Wavelets.Transforms.icwt(cwt2[freq_ind, :], CFW(wav,1/dj), sj[freq_ind], dt=dt, dj=dj)
+
+        # get times over which we apply dv/v algorithm
+        tmin = twindow[1]
+        tmax = twindow[2]
+        # time checks
+        if tmin < minimum(t) || tmax > maximum(t) || tmax <= tmin
+            println("Error: please input right time limits in the time window!")
+        else
+            # trim time vector
+            t_ind = findall(x->(x≤tmax && x≥tmin), t)
+        end
+
+        # trim vectors to correspond to time
+        wt = t[t_ind]
+        window = collect(1:length(wt))
+        rcwt1 = real.(icwt1)
+        rcwt2 = real.(icwt2)
+        wcwt1 = rcwt1[t_ind]
+        wcwt2 = rcwt2[t_ind]
+
+        # normalize both signals, if appropriate
+        if normalize
+            ncwt1 = ((wcwt1 .- mean(wcwt1)) ./ std(wcwt1))[:]
+            ncwt2 = ((wcwt2 .- mean(wcwt2)) ./ std(wcwt2))[:]
+        else
+            ncwt1 = wcwt1[:]
+            ncwt2 = wcwt2[:]
+        end
+
+        # perform dv/v
+        if method=="stretching"
+            (dvv[iband], cc, cdp, eps, err[iband], allC) = stretching(ncwt1, ncwt2, wt, window, fmin, fmax, dvmin=-0.03, dvmax=0.03, ntrial=10000)
+        elseif method=="dtw"
+            (stbarTime, stbar, dist, error) = dtwdt(ncwt1, ncwt2, dt, maxLag=maxLag, b=b, direction=direction)
+            # perform linear regression
+            model = glm(@formula(Y ~0 + X),DataFrame(X=wt,Y=stbarTime),Normal(),
+                        IdentityLink(),wts=ones(length(wt)))
+
+            dvv[iband] = coef(model)[1]*100
+            err[iband] = stderror(model)[1]*100
+        else
+            println("Please choose a valid method")
+        end
+    end
+    return freqbands, -dvv, err
+end
+
+#=
+"""
   wts_dvv(ref,cur,t,window,freqmin,freqmax)
 
 dv/v with stretching method from continuous wavelet transformation.
@@ -133,42 +178,8 @@ function wts_dvv(ref,cur,t,window,freqmin,freqmax;f0=6,dj=1/12,
     end
     return dvv, err, freqs
 end
-
-
-# """
-#
-#   dtw_dvv(ref,cur,t,maxlag,d,direction)
-#
-# dv/v with dynamic time warping method.
-#
-# This function uses the dynamic time warping method to compare the optimal stretching
-# between Reference waveform to the current waveform to get the relative seismic
-# velocity variation (and associated error).
-#
-# # Arguments
-# - `ref::AbstractArray`: Reference correlation.
-# - `cur::AbstractArray`: Current correlation.
-# - `t::AbstractArray`: time vector, common to both `ref` and `cur`.
-# - `maxlag::Int64`: number of maxlag id to search the distance.
-# - `b::Int64`: value to control in distance calculation algorithm (see Mikesell et al. 2015).
-# - `direction::Int64`: direction to accumulate errors (1=forward, -1=backward, 0=double to smooth)
-#
-# # Returns
-# - `dvv::Float64`: Relative Velocity Change dv/v (in %)
-# - `err::Float64`: Errors in the dv/v measurements
-#
-# """
-# function dtw_dvv(ref,cur,t,maxlag, b, direction)
-#     dt = mean(diff(t))
-#     stbarTime, stbar, dist, error = dtwdt(ref, cur, dt, maxLag=maxlag, b=b, direction=direction)
-#
-#     # perform linear regression
-#     model = glm(@formula(Y ~0 + X),DataFrame(X=t,Y=stbarTime),Normal(),
-#                 IdentityLink(),wts=ones(length(t)))
-#
-#     return coef(model)[1], stderror(model)[1]
-# end
-
+=#
+#=
 """
 
   cwt(signal,dt,freqmin,freqmax)
@@ -297,3 +308,4 @@ end
 function psi_ft(A::AbstractArray{T},f0::Real) where T <: AbstractFloat
     return exp.(T(-0.5) .* (A .- T(f0)) .^2) .* T(π ^ -0.25)
 end
+=#
