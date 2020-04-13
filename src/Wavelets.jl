@@ -13,7 +13,10 @@ Perform time-domain dv/v algorithms after cwt, frequency selection, and icwt.
 `twindow::AbstractArray`: Times over which to compute dv/v
 `freqbands::AbstractArray`: Frequency bands over which to compute dv/v
 `dj::AbstractFloat`: Spacing between discrete scales. Default value is 1/12
-`method::String`: 'stretching' or 'dtw'
+`method::String`: "stretching", "dtw", or "wcc".
+                  If "stretching" is chosen, kwargs must include "dvmin", "dvmax", and "ntrials"
+                  If "dtw" is chosen, kwargs must include "b" and "direction"
+                  If "wcc" is chosen, kwargs must include "win_len" and "win_step"
 `normalize::Bool`: Whether or not to normalize signals before dv/v
 
 # Returns
@@ -21,9 +24,13 @@ Perform time-domain dv/v algorithms after cwt, frequency selection, and icwt.
 `dvv::AbstractArray`: dv/v values for each frequency band
 `err::AbstractArray`: errors in dv/v measurements
 """
-function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::AbstractArray, freqbands::AbstractArray; dj::AbstractFloat=1/12, method::String="stretching", normalize::Bool=true)
+function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::AbstractArray, freqbands::AbstractArray; dj::AbstractFloat=1/12, method::String="stretching", normalize::Bool=true,
+    dvmin=-0.03, dvmax=0.03, ntrial=100, # kwargs for stretching
+    maxLag=80, b=1, direction=0, # kwargs for dtw
+    win_len=10.0, win_step=5.0 # kwargs for wcc
+    )
     # define sample frequency
-    dt = t[2] - t[1]
+    dt = mean(diff(t))
     fs = 1/dt
 
     # calculate the CWT of the time series, using identical parameters for both calculations
@@ -40,7 +47,7 @@ function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, t
     (nbands,_) = size(freqbands)
 
     # initialize dvv and err arrays
-    dvv = zeros(nbands)
+    dtt = zeros(nbands)
     err = zeros(nbands)
 
     # loop over frequency bands
@@ -89,20 +96,20 @@ function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, t
 
         # perform dv/v
         if method=="stretching"
-            (dvv[iband], cc, cdp, eps, err[iband], allC) = stretching(ncwt1, ncwt2, wt, window, fmin, fmax, dvmin=-0.03, dvmax=0.03, ntrial=10000)
+            (dtt[iband], cc, cdp, eps, err[iband], allC) = stretching(ncwt1, ncwt2, wt, window, fmin, fmax, dvmin=dvmin, dvmax=dvmax, ntrial=ntrial)
         elseif method=="dtw"
             (stbarTime, stbar, dist, error) = dtwdt(ncwt1, ncwt2, dt, maxLag=maxLag, b=b, direction=direction)
             # perform linear regression
             model = glm(@formula(Y ~0 + X),DataFrame(X=wt,Y=stbarTime),Normal(),
                         IdentityLink(),wts=ones(length(wt)))
-
-            dvv[iband] = coef(model)[1]*100
+            dtt[iband] = coef(model)[1]*100
             err[iband] = stderror(model)[1]*100
-        else
-            println("Please choose a valid method")
+        elseif method=="wcc"
+            (time_axis, delta_t, cc_max) = WCC(ncwt1, ncwt2, fs, tmin, win_len, win_step, tmax)
+            dtt[iband], err[iband] = WCC_dvv(time_axis, delta_t)
         end
     end
-    return freqbands, -dvv, err
+    return freqbands, -dtt, err
 end
 
 """
@@ -126,7 +133,7 @@ Compute wavelet cross spectrum for two signals and a give array of frequency ban
 """
 function wxs(cur, ref, t, twindow, freqbands, dj; unwrapflag::Bool=false)
     # define sample frequency
-    dt = t[2] - t[1]
+    dt = mean(diff(t))
     fs = 1/dt
 
     # perform wavelet coherence transform
@@ -151,7 +158,7 @@ function wxs(cur, ref, t, twindow, freqbands, dj; unwrapflag::Bool=false)
     # time checks
     (tmin, tmax) = twindow[:]
     if tmin < minimum(t) || tmax > maximum(t) || tmax <= tmin
-        println("Error: please input right time limits in the time window!")
+        println("Error: please input correct time limits in the time window!")
     else
         # truncate data with the time window
         t_ind = findall(x->(x≤tmax && x≥tmin), t)
@@ -169,7 +176,7 @@ function wxs(cur, ref, t, twindow, freqbands, dj; unwrapflag::Bool=false)
         (fmin, fmax) = freqbands[iband, :]
         # frequency checks
         if (fmax > maximum(freqs)) || (fmax < fmin)
-            println("Error: please ensure columns 1 and 2 are right frequency limits in freqbands!")
+            println("Error: please make sure columns 1 and 2 are the correct frequency limits in freqbands!")
         end
         freq_ind = findall(f->(f>=fmin && f<=fmax), freqs)
         iphase = phase[freq_ind, t_ind]

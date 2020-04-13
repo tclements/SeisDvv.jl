@@ -41,7 +41,6 @@ function dtwdt(u0::AbstractArray, u1::AbstractArray, dt::Float64;
     if direction == 1 || direction == -1
         dist  = accumulateErrorFunction(direction, err, npts, maxLag, b); # forward accumulation to make distance function
         stbar = backtrackDistanceFunction( -1*direction, dist, err, -maxLag, b ); # find shifts
-
     elseif direction == 0
         #calculate double time to smooth distance array
         dist1 = accumulateErrorFunction( -1, err, npts, maxLag, b ); # forward accumulation to make distance function
