@@ -1,4 +1,3 @@
-using GLM
 export cwt, icwt, wct, wxs, wavelet_dvv
 
 """
