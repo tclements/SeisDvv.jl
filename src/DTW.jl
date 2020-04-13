@@ -1,6 +1,7 @@
-export dtwdt, test, computeErrorFunction, accumulateErrorFunction, backtrackDistanceFunction, computeDTWerror
+export dtwdt, computeErrorFunction, accumulateErrorFunction, backtrackDistanceFunction, computeDTWerror
 
 """
+
     dtwdt(u0, u1, dt; dtwnorm='L2', maxlag=80, b=1, direction=1)
 
 returns minimum distance time lag and index in dist array, and dtw error between traces.
@@ -61,9 +62,12 @@ function dtwdt(u0::AbstractArray, u1::AbstractArray, dt::Float64;
 end
 
 """
+
     computerErrorFunction(u1, u0, nSample, lag, norm='L2')
 
 Compute error function for each sample and lag, see Hale, 2013.
+Dave Hale, (2013), "Dynamic warping of seismic images," GEOPHYSICS 78: S105-S115.
+https://doi.org/10.1190/geo2012-0327.1
 
 # Arguments
 - `u1::AbstractArray`: Trace we intend to warp
@@ -117,6 +121,7 @@ end
 
 
 """
+
     accumulateErrorFunction(dir, err, nSample, lag, b)
 
 # Arguments
@@ -196,6 +201,7 @@ end
 
 
 """
+
     backtrackDistanceFunction(dir, d, err, lmin, b)
 
 # Arguments
@@ -308,6 +314,7 @@ end
 
 
 """
+
     computeDTWerror(Aerr, u, lag0)
 
 Compute the accumulated error along the warping path for DTW

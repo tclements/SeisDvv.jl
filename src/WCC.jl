@@ -1,23 +1,24 @@
 export WCC, WCC_dvv
 
 """
+
     WCC(ref, cur, fs, tmin, window_length, window_step, maxlag)
 
 Windowed cross-correlation following Snieder et al., 2012
 
 # Arguments
-`ref::AbstractArray`: Input signal
-`cur::AbstractArray`: Reference signal
-`fs::Float64`: Sampling frequency
-`tmin::Float64`: Minimum time
-`window_length::Float64`: Length of time window within which to find time shifts
-`window_step::Float64`: Time step to advance window
-`maxlag::Float64`: Maximum time to consider
+- `ref::AbstractArray`: Input signal
+- `cur::AbstractArray`: Reference signal
+- `fs::Float64`: Sampling frequency
+- `tmin::Float64`: Minimum time
+- `window_length::Float64`: Length of time window within which to find time shifts
+- `window_step::Float64`: Time step to advance window
+- `maxlag::Float64`: Maximum time to consider
 
 # Returns
-`time_axis::AbstractArray`: Center times of windows
-`dt::AbstractArray`: Time shifts
-`err::AbstractArray`: Errors in time shift measurements
+- `time_axis::AbstractArray`: Center times of windows
+- `dt::AbstractArray`: Time shifts
+- `err::AbstractArray`: Errors in time shift measurements
 """
 function WCC(ref::AbstractArray, cur::AbstractArray, fs::Float64, tmin::Float64,
              window_length::Float64, window_step::Float64, maxlag::Float64)
@@ -81,17 +82,18 @@ function WCC(ref::AbstractArray, cur::AbstractArray, fs::Float64, tmin::Float64,
 end
 
 """
+
     WCC_dvv(time_axis, dt)
 
 Regreses dv/v from dt/t measurements.
 
 # Arguments
-`time_axis::AbstractArray`: Center times of windows.
-`dt::AbstractArray`: Time shifts
+- `time_axis::AbstractArray`: Center times of windows.
+- `dt::AbstractArray`: Time shifts
 
 # Returns
-`dvv::AbstractArray`: Velocity chnages corresponding to change in time lags
-`err::AbstractArray`: Errors in velocity change measurements
+- `dvv::AbstractArray`: Velocity chnages corresponding to change in time lags
+- `err::AbstractArray`: Errors in velocity change measurements
 """
 function WCC_dvv(time_axis::AbstractArray, dt::AbstractArray)
     model = glm(@formula(Y ~0 + X),DataFrame(X=time_axis,Y=dt),Normal(),

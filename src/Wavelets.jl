@@ -2,29 +2,30 @@ using GLM
 export cwt, icwt, wct, wxs, wavelet_dvv
 
 """
+
     wavelet_dvv(cur, ref, t, twindow, freqbands, dj)
 
 Perform time-domain dv/v algorithms after cwt, frequency selection, and icwt.
 
 # Arguments
-`cur::AbstractArray`: Input signal
-`ref::AbstractArray`: Reference signal
-`t::AbstractArray`: Time vector
-`twindow::AbstractArray`: Times over which to compute dv/v
-`freqbands::AbstractArray`: Frequency bands over which to compute dv/v
-`dj::AbstractFloat`: Spacing between discrete scales. Default value is 1/12
-`method::String`: "stretching", "dtw", or "wcc".
+- `cur::AbstractArray`: Input signal
+- `ref::AbstractArray`: Reference signal
+- `t::AbstractArray`: Time vector
+- `twindow::AbstractArray`: Times over which to compute dv/v
+- `freqbands::AbstractArray`: Frequency bands over which to compute dv/v
+- `dj::AbstractFloat`: Spacing between discrete scales. Default value is 1/12
+- `method::String`: "stretching", "dtw", or "wcc".
                   If "stretching" is chosen, kwargs must include "dvmin", "dvmax", and "ntrials"
                   If "dtw" is chosen, kwargs must include "b" and "direction"
                   If "wcc" is chosen, kwargs must include "win_len" and "win_step"
-`normalize::Bool`: Whether or not to normalize signals before dv/v
+- `norm::Bool`: Whether or not to normalize signals before dv/v
 
 # Returns
-`freqbands::AbstractArray`: fmin and fmax for each iteration of the dv/v algorithm
-`dvv::AbstractArray`: dv/v values for each frequency band
-`err::AbstractArray`: errors in dv/v measurements
+- `freqbands::AbstractArray`: fmin and fmax for each iteration of the dv/v algorithm
+- `dvv::AbstractArray`: dv/v values for each frequency band
+- `err::AbstractArray`: errors in dv/v measurements
 """
-function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::AbstractArray, freqbands::AbstractArray; dj::AbstractFloat=1/12, method::String="stretching", normalize::Bool=true,
+function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::AbstractArray, freqbands::AbstractArray; dj::AbstractFloat=1/12, method::String="stretching", norm::Bool=true,
     dvmin=-0.03, dvmax=0.03, ntrial=100, # kwargs for stretching
     maxLag=80, b=1, direction=0, # kwargs for dtw
     win_len=10.0, win_step=5.0 # kwargs for wcc
@@ -86,7 +87,7 @@ function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, t
         wcwt2 = rcwt2[t_ind]
 
         # normalize both signals, if appropriate
-        if normalize
+        if norm
             ncwt1 = ((wcwt1 .- mean(wcwt1)) ./ std(wcwt1))[:]
             ncwt2 = ((wcwt2 .- mean(wcwt2)) ./ std(wcwt2))[:]
         else
@@ -113,23 +114,23 @@ function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, t
 end
 
 """
+
     wxs(cur, ref, t, twindow, freqbands, dj)
 
 Compute wavelet cross spectrum for two signals and a give array of frequency bands
 
 # Arguments
-`cur::AbstractArray`: Input signal
-`ref::AbstractArray`: Reference signal
-`t::AbstractArray`: Time vector
-`twindow::AbstractArray`: Times over which to compute dv/v
-`freqbands::AbstractArray`: Frequency bands over which to compute dv/v
-`dj::AbstractFloat`: Spacing between discrete scales. Default value is 1/12
+- `cur::AbstractArray`: Input signal
+- `ref::AbstractArray`: Reference signal
+- `t::AbstractArray`: Time vector
+- `twindow::AbstractArray`: Times over which to compute dv/v
+- `freqbands::AbstractArray`: Frequency bands over which to compute dv/v
+- `dj::AbstractFloat`: Spacing between discrete scales. Default value is 1/12
 
 # Returns
-`freqbands::AbstractArray`: fmin and fmax for each iteration of the dv/v algorithm
-`dvv::AbstractArray`: dv/v values for each frequency band
-`err::AbstractArray`: errors in dv/v measurements
-
+- `freqbands::AbstractArray`: fmin and fmax for each iteration of the dv/v algorithm
+- `dvv::AbstractArray`: dv/v values for each frequency band
+- `err::AbstractArray`: errors in dv/v measurements
 """
 function wxs(cur, ref, t, twindow, freqbands, dj; unwrapflag::Bool=false)
     # define sample frequency
@@ -218,6 +219,7 @@ function wxs(cur, ref, t, twindow, freqbands, dj; unwrapflag::Bool=false)
 end
 
 """
+
   cwt(signal,dt,freqmin,freqmax)
 
 Continuous wavelet transform of the signal at specified scales.
@@ -346,18 +348,19 @@ function psi_ft(A::AbstractArray{T},f0::Real) where T <: AbstractFloat
 end
 
 """
+
     smooth(W, dt, dj, scales)
 
 Smooth wavelet spectrum.
 
 # Arguments
-`W::AbstractArray`: wavelet spectrum
-`dt::Float64`: sampling interval in time
-`dj::Float64`: spacing between discrete scales
-`scales::AbstractArray`: wavelet scales
+- `W::AbstractArray`: wavelet spectrum
+- `dt::Float64`: sampling interval in time
+- `dj::Float64`: spacing between discrete scales
+- `scales::AbstractArray`: wavelet scales
 
 # Returns
-`T::AbstractArray`: Smoothed wavelet spectrum
+- `T::AbstractArray`: Smoothed wavelet spectrum
 """
 function smooth(W::AbstractArray, dt::Float64, dj::Float64, scales::AbstractArray)
     # The smoothing is performed by using a filter given by the absolute value
@@ -403,23 +406,32 @@ function smooth(W::AbstractArray, dt::Float64, dj::Float64, scales::AbstractArra
 end
 
 """
+
+    wct(y1, y2, dt, dj, freqbands)
+
 Wavelet coherence transform, which finds regions in the wavelet domain where the two time
 series co-vary but don't necessarily have high power.
 
 # Arguments
-`y1::AbstractArray`: input signal
-`y2::AbstractArray`: input signal
-`dt::AbstractFloat`: sampling interval in time
-`dj::AbstractFloat`: spacing between discrete scales
-`freqbands::AbstractArray`: Frequency bands over which to compute dv/v
-`f0::Real`: Nondimensional frequency from Torrence & Campo, 1998 eq. 1 [Hz].
-`norm::Bool`: Whether or not to normalize signals before cwt
+- `y1::AbstractArray`: input signal
+- `y2::AbstractArray`: input signal
+- `dt::AbstractFloat`: sampling interval in time
+- `dj::AbstractFloat`: spacing between discrete scales
+- `freqbands::AbstractArray`: Frequency bands over which to compute dv/v
+- `f0::Real`: Nondimensional frequency from Torrence & Campo, 1998 eq. 1 [Hz].
+- `norm::Bool`: Whether or not to normalize signals before cwt
 
 # Returns
-`WXS::AbstractArray`: Wavelet cross-spectrum
-TODO: finish writing returns
+- `WXS::AbstractArray`: Wavelet cross-spectrum
+- `WXA::AbstractArray`: Amplitude of wavelet cross-spectrum
+- `rWCT::AbstractArray`: Real part of the wavelet coherence transform
+- `aWCT::AbstractArray`: Angle of wavelet coherence transform
+- `coi::AbstractArray`: Cone of influence - maximum period (in s) of useful
+    information at that particular time. Periods greater than
+    those are subject to edge effects.
+- `freqs::AbstractArray`: Fourier frequencies for wavelet scales [Hz].
 
-Modified from original by Congcong Yuan
+Original from pycwt and modified from Python implementation by Congcong Yuan
 """
 function wct(y1::AbstractArray, y2::AbstractArray, dt::AbstractFloat, dj::AbstractFloat, freqbands::AbstractArray; f0=6.,norm::Bool=true)
     # define wavelet
@@ -446,7 +458,7 @@ function wct(y1::AbstractArray, y2::AbstractArray, dt::AbstractFloat, dj::Abstra
     S1 = smooth(abs.(W1).^2 ./ scales, dt, dj, sj)
     S2 = smooth(abs.(W2).^2 ./ scales, dt, dj, sj)
 
-    # compute wavelet transform coherence
+    # compute cross wavelet transform
     W12 = W1 .* conj.(W2)
 
     S12 = smooth(W12 ./ scales, dt, dj, sj)
