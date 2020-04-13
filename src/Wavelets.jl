@@ -2,7 +2,7 @@ using GLM
 export cwt, icwt, wct, wxs, wavelet_dvv
 
 """
-    waveletMethodDvv(cur, ref, t, twindow, freqbands, dj)
+    wavelet_dvv(cur, ref, t, twindow, freqbands, dj)
 
 Perform time-domain dv/v algorithms after cwt, frequency selection, and icwt.
 
@@ -26,11 +26,9 @@ function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, t
     dt = t[2] - t[1]
     fs = 1/dt
 
-    #cwt1, sj, freqs, coi = cwt(cur, dt, minimum(freqbands), maximum(freqbands))
-    #cwt2, sj, freqs, coi = cwt(ref, dt, minimum(freqbands), maximum(freqbands))
     # calculate the CWT of the time series, using identical parameters for both calculations
-    cwt1, sj, freqs, coi = Transforms.cwt(cur, CFW(WT.Morlet(6),1/dj), J1=J, dt=dt, s0=s0)
-    cwt2, sj, freqs, coi = Transforms.cwt(ref, CFW(WT.Morlet(6),1/dj), J1=J, dt=dt, s0=s0)
+    cwt1, sj, freqs, coi = cwt(cur, dt, minimum(freqbands), maximum(freqbands))
+    cwt2, sj, freqs, coi = cwt(ref, dt, minimum(freqbands), maximum(freqbands))
 
     # if a frequency window is given (instead of a set of frequency bands), we assume
     # dv/v should be calculated for each frequency. We construct a 2D array of the
@@ -58,10 +56,8 @@ function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, t
         end
 
         # perform icwt
-        #icwt1 = icwt(cwt1[:,freq_ind], sj[freq_ind], dt)
-        #icwt2 = icwt(cwt2[:,freq_ind], sj[freq_ind], dt)
-        icwt1 = Transforms.icwt(cwt1[freq_ind, :], CFW(WT.Morlet(6),1/dj), sj[freq_ind], dt=dt, dj=dj)
-        icwt2 = Transforms.icwt(cwt2[freq_ind, :], CFW(WT.Morlet(6),1/dj), sj[freq_ind], dt=dt, dj=dj)
+        icwt1 = icwt(cwt1[:,freq_ind], sj[freq_ind], dt)
+        icwt2 = icwt(cwt2[:,freq_ind], sj[freq_ind], dt)
 
         # get times over which we apply dv/v algorithm
         tmin = twindow[1]
@@ -251,7 +247,7 @@ function cwt(signal::AbstractArray{T,1},dt::AbstractFloat,freqmin::AbstractFloat
     freqs = 1 ./ (flambda .* sj)
 
     # subset by freqmin & freqmax
-    ind = findall((freqs .> freqmin) .& (freqs .< freqmax))
+    ind = findall((freqs .>= freqmin) .& (freqs .<= freqmax))
     sj = sj[ind]
     freqs = freqs[ind]
 
@@ -433,8 +429,10 @@ function wct(y1::AbstractArray, y2::AbstractArray, dt::AbstractFloat, dj::Abstra
     end
 
     # calculate the CWT of the time series, using identical parameters for both calculations
-    W1, sj, freqs, coi = Transforms.cwt(y1, CFW(wav,1/dj), J1=J, dt=dt, s0=s0)
-    W2, sj, freqs, coi = Transforms.cwt(y2, CFW(wav,1/dj), J1=J, dt=dt, s0=s0)
+    W1, sj, freqs, coi = cwt(y1, dt, minimum(freqbands), maximum(freqbands))
+    W2, sj, freqs, coi = cwt(y2, dt, minimum(freqbands), maximum(freqbands))
+    W1=W1'
+    W2=W2'
 
     scales = Array{Float64,2}(undef, size(W1))
     for i=1:size(scales, 2)
