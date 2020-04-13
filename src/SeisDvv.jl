@@ -1,9 +1,11 @@
 module SeisDvv
 
-using GLM, FFTW, Interpolations, SeisNoise
+using GLM, Statistics, FFTW, Interpolations, SeisNoise
 
-include("VelocityChange/MWCS.jl")
-include("VelocityChange/Stretching.jl")
-include("VelocityChange/Wavelets.jl")
+include("WCC.jl")
+include("Stretching.jl")
+include("DTW.jl")
+include("MWCS.jl")
+include("Wavelets.jl")
 
-end 
+end
