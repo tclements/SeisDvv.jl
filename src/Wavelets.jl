@@ -106,7 +106,7 @@ function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, t
 end
 
 """
-    wxs(cur, ref, t, twindow, freqbands, dj, s0, J)
+    wxs(cur, ref, t, twindow, freqbands, dj)
 
 Compute wavelet cross spectrum for two signals and a give array of frequency bands
 
@@ -117,8 +117,6 @@ Compute wavelet cross spectrum for two signals and a give array of frequency ban
 `twindow::AbstractArray`: Times over which to compute dv/v
 `freqbands::AbstractArray`: Frequency bands over which to compute dv/v
 `dj::AbstractFloat`: Spacing between discrete scales. Default value is 1/12
-`s0::AbstractFloat`: Lowest resolvable scale
-`J::Int64`: Total number of scales
 
 # Returns
 `freqbands::AbstractArray`: fmin and fmax for each iteration of the dv/v algorithm
@@ -126,13 +124,13 @@ Compute wavelet cross spectrum for two signals and a give array of frequency ban
 `err::AbstractArray`: errors in dv/v measurements
 
 """
-function wxs(cur, ref, t, twindow, freqbands, dj, s0, J; unwrapflag::Bool=false, windowflag::Bool=true, nwindow::Float64=1.5)
+function wxs(cur, ref, t, twindow, freqbands, dj; unwrapflag::Bool=false)
     # define sample frequency
     dt = t[2] - t[1]
     fs = 1/dt
 
     # perform wavelet coherence transform
-    WXS, WXA, WCT, aWCT, coi, freqs = wct(cur, ref, dt, dj, freqbands, s0, J)
+    WXS, WXA, WCT, aWCT, coi, freqs = wct(cur, ref, dt, dj, freqbands)
 
     # do inverse cwt for different frequency bands
     if unwrapflag==true
@@ -407,8 +405,6 @@ series co-vary but don't necessarily have high power.
 `dt::AbstractFloat`: sampling interval in time
 `dj::AbstractFloat`: spacing between discrete scales
 `freqbands::AbstractArray`: Frequency bands over which to compute dv/v
-`s0::AbstractFloat`: Lowest resolvable scale
-`J::Int64`: Total number of scales
 `f0::Real`: Nondimensional frequency from Torrence & Campo, 1998 eq. 1 [Hz].
 `norm::Bool`: Whether or not to normalize signals before cwt
 
@@ -418,7 +414,7 @@ TODO: finish writing returns
 
 Modified from original by Congcong Yuan
 """
-function wct(y1::AbstractArray, y2::AbstractArray, dt::AbstractFloat, dj::AbstractFloat, freqbands, s0, J; f0=6.,norm::Bool=true)
+function wct(y1::AbstractArray, y2::AbstractArray, dt::AbstractFloat, dj::AbstractFloat, freqbands::AbstractArray; f0=6.,norm::Bool=true)
     # define wavelet
     wav = WT.Morlet(6)
 
