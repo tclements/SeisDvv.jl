@@ -1,3 +1,4 @@
+using GLM
 export cwt, icwt, wct, wxs, wavelet_dvv
 
 """
@@ -100,10 +101,7 @@ function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, t
         elseif method=="dtw"
             (stbarTime, stbar, dist, error) = dtwdt(ncwt1, ncwt2, dt, maxLag=maxLag, b=b, direction=direction)
             # perform linear regression
-            model = glm(@formula(Y ~0 + X),DataFrame(X=wt,Y=stbarTime),Normal(),
-                        IdentityLink(),wts=ones(length(wt)))
-            dtt[iband] = coef(model)[1]*100
-            err[iband] = stderror(model)[1]*100
+            dtt[iband], err[iband], a, ea, m0, em0 = dtw_dvv(wt, stbarTime)
         elseif method=="wcc"
             (time_axis, delta_t, cc_max) = WCC(ncwt1, ncwt2, fs, tmin, win_len, win_step, tmax)
             dtt[iband], err[iband] = WCC_dvv(time_axis, delta_t)

@@ -62,6 +62,39 @@ function dtwdt(u0::AbstractArray, u1::AbstractArray, dt::Float64;
 end
 
 """
+    dtw_dvv(X, Y)
+
+Linear regression of phase shifts to time to give dt/t=-dv/v
+
+# Arguments
+- `time_axis::AbstractArray`: Array of lag times
+- `dt::AbstractArray`: Time shifts for each lag time
+
+# Returns
+- `m::Float64`: dt/t for current correlation
+- `em::Float64`: Error for calculation of `m`
+- `a::Float64`: Intercept for regression calculation
+- `ea::Float64`: Error on intercept
+- `m0::Float64`: dt/t for current correlation with no intercept
+- `em0::Float64`: Error for calculation of `m0`
+"""
+function dtw_dvv(time_axis, dt)
+    # regress data using least squares
+    model0 = glm(@formula(Y ~0 + X),DataFrame(X=time_axis,Y=dt),Normal(),
+                IdentityLink(),wts=ones(length(time_axis)))
+    model = glm(@formula(Y ~ X),DataFrame(X=time_axis,Y=dt),Normal(),
+                IdentityLink(),wts=ones(length(time_axis)))
+
+    a,m = coef(model).*100
+    ea, em = stderror(model).*100
+
+    m0 = coef(model0)[1]*100
+    em0 = stderror(model0)[1]*100
+
+    return m, em, a, ea, m0, em0
+end
+
+"""
 
     computerErrorFunction(u1, u0, nSample, lag, norm='L2')
 
