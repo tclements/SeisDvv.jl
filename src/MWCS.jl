@@ -204,11 +204,11 @@ at time t. Solves with a weighted linear regression with weights equal to
 
 # Returns
 - `m::Float64`: dt/t for current correlation
-- `em::Float64`: Error for calulatoin of `m`
+- `em::Float64`: Error for calculation of `m`
 - `a::Float64`: Intercept for regression calculation
 - `ea::Float64`: Error on intercept
 - `m0::Float64`: dt/t for current correlation with no intercept
-- `em0::Float64`: Error for calulatoin of `m0`
+- `em0::Float64`: Error for calculation of `m0`
 """
 function mwcs_dvv(time_axis::AbstractArray, dt::AbstractArray,
                      err::AbstractArray, coh::AbstractArray, dtt_lag::String,
