@@ -163,8 +163,7 @@ function mwcs(ref::AbstractArray,cur::AbstractArray,fmin::Float64,
         sx2 = sum(w[:,ii] .* v.^2)
         err[ii] = sqrt(e * s2x2 / sx2^2)
     end
-    dt ./= 2π
-    err ./= 2π
+
     return time_axis, dt, err, mcoh
 end
 
