@@ -128,7 +128,7 @@ Compute wavelet cross spectrum for two signals and a give array of frequency ban
 - `dvv::AbstractArray`: dv/v values for each frequency band
 - `err::AbstractArray`: errors in dv/v measurements
 """
-function wxs(cur, ref, t, twindow, freqbands, dj; unwrapflag::Bool=false)
+function wxs(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::AbstractArray, freqbands::AbstractArray, dj::AbstractFloat; unwrapflag::Bool=false)
     # define sample frequency
     dt = mean(diff(t))
     fs = 1/dt
