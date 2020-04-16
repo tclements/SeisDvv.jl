@@ -1,6 +1,6 @@
 module SeisDvv
 
-using GLM, Statistics, FFTW, Interpolations, SeisNoise
+using GLM, DataFrames, Statistics, FFTW, Interpolations, SeisNoise
 
 include("WCC.jl")
 include("Stretching.jl")

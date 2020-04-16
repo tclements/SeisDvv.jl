@@ -1,4 +1,4 @@
-export dtwdt, computeErrorFunction, accumulateErrorFunction, backtrackDistanceFunction, computeDTWerror
+export dtwdt, dtw_dvv, computeErrorFunction, accumulateErrorFunction, backtrackDistanceFunction, computeDTWerror
 
 """
 
