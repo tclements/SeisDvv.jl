@@ -78,7 +78,7 @@ Linear regression of phase shifts to time to give dt/t=-dv/v
 - `m0::Float64`: dt/t for current correlation with no intercept
 - `em0::Float64`: Error for calculation of `m0`
 """
-function dtw_dvv(time_axis, dt)
+function dtw_dvv(time_axis::AbstractArray, dt::AbstractArray)
     # regress data using least squares
     model0 = glm(@formula(Y ~0 + X),DataFrame(X=time_axis,Y=dt),Normal(),
                 IdentityLink(),wts=ones(length(time_axis)))
