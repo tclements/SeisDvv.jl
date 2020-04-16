@@ -37,9 +37,6 @@ function WCC(ref::AbstractArray, cur::AbstractArray, fs::Float64, tmin::Float64,
      err = zeros(N)
      time_axis = time_axis[1:N]
 
-     # Find values in frequency range of interest
-     freq_vec = FFTW.rfftfreq(padd,fs)
-     index_range = findall(x -> x >= fmin && x <= fmax,freq_vec)
      cci = zeros(window_length_samples,N)
      cri = zeros(window_length_samples,N)
 
