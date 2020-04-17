@@ -56,7 +56,7 @@ function wavelet_dvv(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, t
 
         # get current frequencies over which we apply icwt
         # frequency checks
-        if (fmax > maximum(freqs) || fmax < fmin)
+        if fmax < fmin
             println("Error: please ensure columns 1 and 2 are right frequency limits in freqbands!")
         else
             freq_ind = findall(f->(f>=fmin && f<=fmax), freqs)
@@ -172,7 +172,7 @@ function wxs(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::
     for iband=1:nbands
         (fmin, fmax) = freqbands[iband, :]
         # frequency checks
-        if (fmax > maximum(freqs)) || (fmax < fmin)
+        if fmax < fmin
             println("Error: please make sure columns 1 and 2 are the correct frequency limits in freqbands!")
         end
         freq_ind = findall(f->(f>=fmin && f<=fmax), freqs)
