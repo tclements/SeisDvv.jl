@@ -430,9 +430,6 @@ series co-vary but don't necessarily have high power.
 Original from pycwt and modified from Python implementation by Congcong Yuan
 """
 function wct(y1::AbstractArray, y2::AbstractArray, dt::AbstractFloat, dj::AbstractFloat, freqbands::AbstractArray; f0=6.,norm::Bool=true)
-    # define wavelet
-    wav = WT.Morlet(6)
-
     # normalize signals
     if norm
         y1 = (y1 .- mean(y1)) ./ std(y1)
