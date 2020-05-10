@@ -58,8 +58,101 @@ function dtwdt(u0::AbstractArray, u1::AbstractArray, dt::Float64;
     #accumulate distance in distance array to calculate dtw error
     error = computeDTWerror( err, stbar, maxLag );
 
-    return (stbarTime, stbar, dist, error)
+    return stbarTime, stbar, dist, error
 end
+
+"""
+
+    dtwdt(u0, u1, dt, freqbands; dtwnorm='L2', maxlag=80, b=1, direction=1, norm=true)
+
+returns minimum distance time lag and index in dist array, and dtw error between traces.
+
+# Arguments
+- `u0::AbstractArray`: time series #1
+- `u1::AbstractArray`: time series #2
+- `dt::Float64`: time step
+- `freqbands::AbstractArray`: Frequency bands over which to compute dv/v
+- `dtwnorm::String`: norm used to calculate distance; effect on the unit of dtw error. (L2 or L1)
+-  Note: L2 is not squard, thus distance is calculated as (u1[i]-u0[j])^2
+- `maxlag::Int64`: number of maxLag id to search the distance.
+- `b::Int64t`: b value to controll in distance calculation algorithm (see Mikesell et al. 2015).
+- `direction::Int64`: length of noise data window, in seconds, to cross-correlate.
+- `norm::Bool`: Whether or not to normalize signals before dv/v
+
+# Returns
+- `-dtt::AbstractArray`: dv/v for current correlation for a range of frequencies
+- `err::Float64`: Error for calculation of dv/v for a range of frequencies
+- `a::Float64`: Intercept for regression calculation
+- `ea::Float64`: Error on intercept
+- `m0::Float64`: dt/t for current correlation with no intercept
+- `em0::Float64`: Error for calculation of `m0`
+"""
+function dtwdt(u0::AbstractArray, u1::AbstractArray, dt::Float64, freqbands::AbstractArray;
+    dtwnorm::String="L2",     #norm to calculate distance; effect on the unit of dtw error
+    maxLag::Int64=80,         #number of maxLag id to search the distance
+    b::Int64=1,               #b value to controll in distance calculation algorithm (see Mikesell et al. 2015)
+    direction::Int64=1,       #direction to accumulate errors (1=forward, -1=backward, 0=double to smooth)
+    norm::Bool=true)
+    # define sample frequency
+    fs = 1/dt
+
+    # calculate the CWT of the time series, using identical parameters for both calculations
+    cwt1, sj, freqs, coi = cwt(u0, dt, minimum(freqbands), maximum(freqbands))
+    cwt2, sj, freqs, coi = cwt(u1, dt, minimum(freqbands), maximum(freqbands))
+
+    # if a frequency window is given (instead of a set of frequency bands), we assume
+    # dv/v should be calculated for each frequency. We construct a 2D array of the
+    # form [f1 f1; f2 f2; ...], which can be treated the same as a 2D array of frequency bands
+    if ndims(freqbands)==1
+        freqbands = hcat(freqs, freqs)
+    end
+    # number of frequency bands
+    (nbands,_) = size(freqbands)
+
+    # initialize arrays
+    dtt = zeros(nbands)
+    err = similar(dtt)
+    a = similar(dtt)
+    ea = similar(dtt)
+    m0 = similar(dtt)
+    em0 = similar(dtt)
+
+    # loop over frequency bands
+    for iband=1:nbands
+        (fmin, fmax) = freqbands[iband, :]
+
+        # get current frequencies over which we apply icwt
+        # frequency checks
+        if fmax < fmin
+            println("Error: please ensure columns 1 and 2 are right frequency limits in freqbands!")
+        else
+            freq_ind = findall(f->(f>=fmin && f<=fmax), freqs)
+        end
+
+        # perform icwt
+        icwt1 = icwt(cwt1[:,freq_ind], sj[freq_ind], dt)
+        icwt2 = icwt(cwt2[:,freq_ind], sj[freq_ind], dt)
+        wcwt1 = real.(icwt1)
+        wcwt2 = real.(icwt2)
+
+        # normalize both signals, if appropriate
+        if norm
+            ncwt1 = ((wcwt1 .- mean(wcwt1)) ./ std(wcwt1))[:]
+            ncwt2 = ((wcwt2 .- mean(wcwt2)) ./ std(wcwt2))[:]
+        else
+            ncwt1 = wcwt1[:]
+            ncwt2 = wcwt2[:]
+        end
+
+        # perform dv/v
+        stbarTime, stbar, dist, error = dtwdt(ncwt1, ncwt2, dt, maxLag=maxLag, b=b, direction=direction)
+        # perform linear regression
+        dtt[iband], err[iband], a[iband], ea[iband], m0[iband], em0[iband] = dtw_dvv(collect(1:length(u0))*dt, stbarTime)
+    end
+
+    return freqbands, -dtt, err, a, ea, m0, em0
+end
+
 
 """
     dtw_dvv(X, Y)

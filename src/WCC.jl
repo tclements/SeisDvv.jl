@@ -80,6 +80,83 @@ end
 
 """
 
+    WCC(ref, cur, fs, tmin, window_length, window_step, maxlag, freqbands; norm=true)
+
+Windowed cross-correlation following Snieder et al., 2012
+
+# Arguments
+- `ref::AbstractArray`: Input signal
+- `cur::AbstractArray`: Reference signal
+- `fs::Float64`: Sampling frequency
+- `tmin::Float64`: Minimum time
+- `window_length::Float64`: Length of time window within which to find time shifts
+- `window_step::Float64`: Time step to advance window
+- `maxlag::Float64`: Maximum time to consider
+- `freqbands::AbstractArray`: Frequency bands over which to compute dv/v
+- `norm::Bool`: Whether or not to normalize signals before dv/v
+
+# Returns
+- `dt::AbstractArray`: Time shifts
+- `err::AbstractArray`: Errors in time shift measurements
+"""
+function WCC(ref::AbstractArray, cur::AbstractArray, fs::Float64, tmin::Float64,
+             window_length::Float64, window_step::Float64, maxlag::Float64, freqbands::AbstractArray; norm::Bool=true)
+     # define sampling interval
+     dt = 1/fs
+
+     # calculate the CWT of the time series, using identical parameters for both calculations
+     cwt1, sj, freqs, coi = cwt(cur, dt, minimum(freqbands), maximum(freqbands))
+     cwt2, sj, freqs, coi = cwt(ref, dt, minimum(freqbands), maximum(freqbands))
+
+     # if a frequency window is given (instead of a set of frequency bands), we assume
+     # dv/v should be calculated for each frequency. We construct a 2D array of the
+     # form [f1 f1; f2 f2; ...], which can be treated the same as a 2D array of frequency bands
+     if ndims(freqbands)==1
+         freqbands = hcat(freqs, freqs)
+     end
+     # number of frequency bands
+     (nbands,_) = size(freqbands)
+
+     # initialize dvv and err arrays
+     dtt = zeros(nbands)
+     err = zeros(nbands)
+
+     # loop over frequency bands
+     for iband=1:nbands
+         (fmin, fmax) = freqbands[iband, :]
+
+         # get current frequencies over which we apply icwt
+         # frequency checks
+         if fmax < fmin
+             println("Error: please ensure columns 1 and 2 are right frequency limits in freqbands!")
+         else
+             freq_ind = findall(f->(f>=fmin && f<=fmax), freqs)
+         end
+
+         # perform icwt
+         icwt1 = icwt(cwt1[:,freq_ind], sj[freq_ind], dt)
+         icwt2 = icwt(cwt2[:,freq_ind], sj[freq_ind], dt)
+         wcwt1 = real.(icwt1)
+         wcwt2 = real.(icwt2)
+
+         # normalize both signals, if appropriate
+         if norm
+             ncwt1 = ((wcwt1 .- mean(wcwt1)) ./ std(wcwt1))[:]
+             ncwt2 = ((wcwt2 .- mean(wcwt2)) ./ std(wcwt2))[:]
+         else
+             ncwt1 = wcwt1[:]
+             ncwt2 = wcwt2[:]
+         end
+
+         time_axis, delta_t, cc_max = WCC(ncwt1, ncwt2, fs, tmin, win_len, win_step, tmax)
+         dtt[iband], err[iband] = WCC_dvv(time_axis, delta_t)
+     end
+
+     return freqbands, dtt, err
+end
+
+"""
+
     WCC_dvv(time_axis, dt)
 
 Regreses dv/v from dt/t measurements.
