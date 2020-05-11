@@ -1,173 +1,109 @@
-export cwt, icwt, wts_dvv
-
-# """
-#
-#   wtdtw(ref,cur,t,window,freqmin,freqmax)
-#
-# dv/v with dynamic time warping method from continuous wavelet transformation.
-#
-# This function uses the dynamic time warping method at each frequency from the
-# continuous wavelet transform to compare the Reference waveform to the current
-# waveform to get the relative seismic velocity variation (and associated error).
-#
-# # Arguments
-# - `ref::AbstractArray`: Reference correlation.
-# - `cur::AbstractArray`: Current correlation.
-# - `t::AbstractArray`: time vector, common to both `ref` and `cur`.
-# - `window::AbstractArray`: vector of the indices of the `cur` and `ref` windows
-#                           on which you want to do the measurements
-# - `freqmin::Float64`: minimum frequency in the correlation [Hz]
-# - `freqmax::Float64`: maximum frequency in the correlation [Hz]
-# - `maxlag::Int64`: number of maxlag id to search the distance.
-# - `b::Int64`: value to control in distance calculation algorithm (see Mikesell et al. 2015).
-# - `direction::Int64`: direction to accumulate errors (1=forward, -1=backward, 0=double to smooth)
-# - `f0::Real`: Nondimensional frequency from Torrence & Campo, 1998 eq. 1 [Hz].
-# - `dj::AbstractFloat`: Spacing between discrete scales. Default value is 1/12.
-# - `standardize::Bool`: Remove mean and std from wavelet spectrum or not.
-#
-# # Returns
-# - `dvv::AbstactArray`: Relative Velocity Change dv/v (in %)
-# - `err::AbstractArray`: Errors in the dv/v measurements
-#
-# Originally written in python by Congcong Yuan (30 Jun, 2019)
-# """
-# function wtdtw(ref,cur,t,window,freqmin,freqmax;maxlag=80,b=1,direction=1,f0=6,dj=1/12,
-#                standardize=true)
-#
-#     T = eltype(ref)
-#     dt = mean(diff(t))
-#     # apply cwt on two traces
-#     cwt1,sj,freqs,coi = cwt(ref,dt,freqmin,freqmax, f0=f0,dj=dj)
-#     cwt2,sj,freqs,coi = cwt(cur,dt,freqmin,freqmax, f0=f0,dj=dj)
-#
-#     # extract real values of cwt
-#     rcwt1, rcwt2 = real.(cwt1), real.(cwt2)
-#
-#     # Use DTW method to extract dvv
-#     Nfreq = length(freqs)
-#     dvv = zeros(T,Nfreq)
-#     err = zeros(T,Nfreq)
-#
-#     if standardize
-#         standardize!(rcwt1)
-#         standardize!(rcwt2)
-#     end
-#
-#     for ii = 1:Nfreq
-#
-#         # find cone of influence
-#         indcoi = findall(freqs[ii] .>= 1. ./coi)
-#         indt = findall(x->x in indcoi, window)
-#
-#         if length(indt) == 0
-#             continue
-#         end
-#
-#         dvv[ii], err[ii] = dtw_dvv(rcwt1[window[indt],ii], rcwt2[window[indt],ii],t[window[indt]],maxlag, b, direction)
-#     end
-#     return dvv, err, freqs
-# end
+export cwt, icwt, wct, wxs
 
 """
 
-  wts_dvv(ref,cur,t,window,freqmin,freqmax)
+    wxs(cur, ref, t, twindow, freqbands, dj)
 
-dv/v with stretching method from continuous wavelet transformation.
-
-This function uses the stretching method at each frequency from the
-continuous wavelet transform to compare the Reference waveform to the current
-waveform to get the relative seismic velocity variation (and associated error).
+Compute wavelet cross spectrum for two signals and a give array of frequency bands
 
 # Arguments
-- `ref::AbstractArray`: Reference correlation.
-- `cur::AbstractArray`: Current correlation.
-- `t::AbstractArray`: time vector, common to both `ref` and `cur`.
-- `window::AbstractArray`: vector of the indices of the `cur` and `ref` windows
-                          on which you want to do the measurements
-- `freqmin::Float64`: minimum frequency in the correlation [Hz]
-- `freqmax::Float64`: maximum frequency in the correlation [Hz]
-- `f0::Real`: Nondimensional frequency from Torrence & Campo, 1998 eq. 1 [Hz].
-- `dj::AbstractFloat`: Spacing between discrete scales. Default value is 1/12.
-- `standardize::Bool`: Remove mean and std from wavelet spectrum or not.
+- `cur::AbstractArray`: Input signal
+- `ref::AbstractArray`: Reference signal
+- `t::AbstractArray`: Time vector
+- `twindow::AbstractArray`: Times over which to compute dv/v
+- `freqbands::AbstractArray`: Frequency bands over which to compute dv/v
+- `dj::AbstractFloat`: Spacing between discrete scales. Default value is 1/12
 
 # Returns
-- `dvv::AbstactArray`: Relative Velocity Change dv/v (in %)
-- `err::AbstractArray`: Errors in the dv/v measurements
-
-Originally written in python by Congcong Yuan (30 Jun, 2019)
+- `freqbands::AbstractArray`: fmin and fmax for each iteration of the dv/v algorithm
+- `dvv::AbstractArray`: dv/v values for each frequency band
+- `err::AbstractArray`: errors in dv/v measurements
 """
-function wts_dvv(ref,cur,t,window,freqmin,freqmax;f0=6,dj=1/12,
-               standardize=true,ntrial=50,dvmin=-0.03,dvmax=0.03)
-
-    T = eltype(ref)
+function wxs(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::AbstractArray, freqbands::AbstractArray; dj::AbstractFloat=1/12, unwrapflag::Bool=false)
+    # define sample frequency
     dt = mean(diff(t))
-    # apply cwt on two traces
-    cwt1,sj,freqs,coi = cwt(ref,dt,freqmin,freqmax, f0=f0,dj=dj)
-    cwt2,sj,freqs,coi = cwt(cur,dt,freqmin,freqmax, f0=f0,dj=dj)
+    fs = 1/dt
 
-    # Use DTW method to extract dvv
-    Nfreq = length(freqs)
-    dvv = zeros(T,Nfreq)
-    err = zeros(T,Nfreq)
+    # perform wavelet coherence transform
+    WXS, WXA, WCT, aWCT, coi, freqs = wct(cur, ref, dt, dj, freqbands)
 
-    for ii = 1:Nfreq
-        icwt1 = icwt(cwt1[:,ii],sj[ii],dt)
-        icwt2 = icwt(cwt2[:,ii],sj[ii],dt)
-
-        if standardize
-            standardize!(icwt1)
-            standardize!(icwt2)
-        end
-
-        # find cone of influence
-        indcoi = findall(freqs[ii] .>= 1. ./coi)
-        indt = findall(x->x in indcoi, window)
-
-        if length(indt) == 0
-            continue
-        end
-
-        # calculate dvv with stretching
-        dvv[ii], cc,cdp, ep, err[ii],allC = stretching(icwt1, icwt2,t,window[indt],
-               freqmin,freqmax,ntrial=ntrial,dvmin=dvmin,dvmax=dvmax)
+    # do inverse cwt for different frequency bands
+    if unwrapflag==true
+        phase = unwrap(aWCT, dims=ndims(aWCT))
+    else
+        phase = aWCT
     end
-    return dvv, err, freqs
+
+    # if a frequency window is given (instead of a set of frequency bands), we assume
+    # dv/v should be calculated for each frequency. We construct a 2D array of the
+    # form [f1 f1; f2 f2; ...], which can be treated the same as a 2D array of frequency bands
+    if ndims(freqbands)==1
+        freqbands = hcat(freqs, freqs)
+    end
+    # number of frequency bands
+    (nbands,_) = size(freqbands)
+
+    # time checks
+    (tmin, tmax) = twindow[:]
+    if tmin < minimum(t) || tmax > maximum(t) || tmax <= tmin
+        println("Error: please input correct time limits in the time window!")
+    else
+        # truncate data with the time window
+        t_ind = findall(x->(x≤tmax && x≥tmin), t)
+        wt = t[t_ind]
+    end
+    # dt vector will be filled by regression of phase/frequency, and then
+    # will be used to find dv/v by regression of dt/t
+    delta_t = zeros(nbands, length(wt))
+    delta_t_err = zeros(nbands, length(wt))
+
+    dvv = zeros(nbands)
+    err = zeros(nbands)
+    # iterate over frequency bands
+    for iband=1:nbands
+        (fmin, fmax) = freqbands[iband, :]
+        # frequency checks
+        if fmax < fmin
+            println("Error: please make sure columns 1 and 2 are the correct frequency limits in freqbands!")
+        end
+        freq_ind = findall(f->(f>=fmin && f<=fmax), freqs)
+        iphase = phase[freq_ind, t_ind]
+
+        # get dt by regression of phase delays/frequency band
+        for itime=1:length(wt)
+            if fmin==fmax
+                # simple division instead of regression, since we have only 1 point
+                delta_t[iband, itime] = iphase[itime]/(2π*fmax)
+            else
+                # get weights
+                w = 1 ./ WCT[freq_ind, itime]
+                infNaN = findall(x->(isnan.(x) || isinf.(x)), w)
+                if length(infNaN)!=0
+                    w[infNaN] .= 1.0
+                end
+                # WLS inversion
+                # This does NOT force the best fit line through the origin
+                model = glm(@formula(Y ~ X),DataFrame(X=freqs[freq_ind]*2π,Y=iphase[:,itime]),Normal(),IdentityLink(),wts=w)
+                delta_t[iband, itime] = coef(model)[2]
+                delta_t_err[iband, itime] = stderror(model)[2]
+            end
+        end
+
+        # regression in time to get time shift
+        w2 = 1 ./ mean(WCT[freq_ind, t_ind], dims=1)
+        infNaN =findall(x->(isnan.(x) || isinf.(x)), w2[:])
+        if length(infNaN)!=0
+            w2[:, infNaN] .= 1.0
+        end
+
+        # find slope of dt/t to find -dv/v
+        model = glm(@formula(Y ~0 + X),DataFrame(X=wt,Y=delta_t[iband, :]),Normal(),IdentityLink(),wts=w2[:])
+        dvv[iband] = -coef(model)[1]*100
+        err[iband] = stderror(model)[1]*100
+    end
+
+    return freqbands, dvv, err
 end
-
-
-# """
-#
-#   dtw_dvv(ref,cur,t,maxlag,d,direction)
-#
-# dv/v with dynamic time warping method.
-#
-# This function uses the dynamic time warping method to compare the optimal stretching
-# between Reference waveform to the current waveform to get the relative seismic
-# velocity variation (and associated error).
-#
-# # Arguments
-# - `ref::AbstractArray`: Reference correlation.
-# - `cur::AbstractArray`: Current correlation.
-# - `t::AbstractArray`: time vector, common to both `ref` and `cur`.
-# - `maxlag::Int64`: number of maxlag id to search the distance.
-# - `b::Int64`: value to control in distance calculation algorithm (see Mikesell et al. 2015).
-# - `direction::Int64`: direction to accumulate errors (1=forward, -1=backward, 0=double to smooth)
-#
-# # Returns
-# - `dvv::Float64`: Relative Velocity Change dv/v (in %)
-# - `err::Float64`: Errors in the dv/v measurements
-#
-# """
-# function dtw_dvv(ref,cur,t,maxlag, b, direction)
-#     dt = mean(diff(t))
-#     stbarTime, stbar, dist, error = dtwdt(ref, cur, dt, maxLag=maxlag, b=b, direction=direction)
-#
-#     # perform linear regression
-#     model = glm(@formula(Y ~0 + X),DataFrame(X=t,Y=stbarTime),Normal(),
-#                 IdentityLink(),wts=ones(length(t)))
-#
-#     return coef(model)[1], stderror(model)[1]
-# end
 
 """
 
@@ -205,7 +141,7 @@ function cwt(signal::AbstractArray{T,1},dt::AbstractFloat,freqmin::AbstractFloat
     freqs = 1 ./ (flambda .* sj)
 
     # subset by freqmin & freqmax
-    ind = findall((freqs .> freqmin) .& (freqs .< freqmax))
+    ind = findall((freqs .>= freqmin) .& (freqs .<= freqmax))
     sj = sj[ind]
     freqs = freqs[ind]
 
@@ -296,4 +232,126 @@ end
 
 function psi_ft(A::AbstractArray{T},f0::Real) where T <: AbstractFloat
     return exp.(T(-0.5) .* (A .- T(f0)) .^2) .* T(π ^ -0.25)
+end
+
+"""
+
+    smooth(W, dt, dj, scales)
+
+Smooth wavelet spectrum.
+
+# Arguments
+- `W::AbstractArray`: wavelet spectrum
+- `dt::Float64`: sampling interval in time
+- `dj::Float64`: spacing between discrete scales
+- `scales::AbstractArray`: wavelet scales
+
+# Returns
+- `T::AbstractArray`: Smoothed wavelet spectrum
+"""
+function smooth(W::AbstractArray, dt::Float64, dj::Float64, scales::AbstractArray)
+    # The smoothing is performed by using a filter given by the absolute value
+    # of the wavelet function at each scale, normalized to have a total weight
+    # of unity, as per suggestions by Torrence &W ebster (1999) and by Grinsted et al. (2004).
+    (m, n) = size(W)
+
+    # Filter in time
+    k = 2π*FFTW.fftfreq(length(W[1,:]))
+    k2 = k.^2
+    snorm = scales ./ dt
+
+    # Smoothing by Gaussian window (absolute value of wavelet function)
+    # using the convolution theorem: multiplication by Gaussian curve in
+    # Fourier domain for each scale, outer product of scale and frequency
+    F = exp.(-0.5 .* (snorm.^2) .* k2') # outer product
+    smooth = (ifft(F .* fft(W,2), 2))
+
+    T = smooth[:, 1:n] # Remove possible padded region due to FFTW
+
+    # Filter in scale. For the Morlet wavelet, this is simply a boxcar with 0.6 width
+    # construct boxcar
+    wsize = convert(Int64, round(0.60 / dj * 2))
+    if wsize % 2 == 0
+        wsize+=1
+    end
+    halfWin = div(wsize,2)
+
+    # iterate over 'horizontal' and smooth in the 'vertical'
+    # this could also be done by adding an axis to the transpose and performing a 2d convolution
+    for i=1:size(T,2)
+        # pad signal for 'same' padding
+        paddedT = vcat(T[1,i]*ones(halfWin), T[:,i], T[end,i]*ones(halfWin))
+        # smooth signal
+        win = Array{eltype(paddedT), 1}(undef, wsize)
+        win.=ones(wsize)/wsize
+        smoothT = conv(paddedT, win)
+        # trim signal
+        T[:,i] = smoothT[2*halfWin+1:end-2*halfWin]
+    end
+
+    return T
+end
+
+"""
+
+    wct(y1, y2, dt, dj, freqbands)
+
+Wavelet coherence transform, which finds regions in the wavelet domain where the two time
+series co-vary but don't necessarily have high power.
+
+# Arguments
+- `y1::AbstractArray`: input signal
+- `y2::AbstractArray`: input signal
+- `dt::AbstractFloat`: sampling interval in time
+- `dj::AbstractFloat`: spacing between discrete scales
+- `freqbands::AbstractArray`: Frequency bands over which to compute dv/v
+- `f0::Real`: Nondimensional frequency from Torrence & Campo, 1998 eq. 1 [Hz].
+- `norm::Bool`: Whether or not to normalize signals before cwt
+
+# Returns
+- `WXS::AbstractArray`: Wavelet cross-spectrum
+- `WXA::AbstractArray`: Amplitude of wavelet cross-spectrum
+- `rWCT::AbstractArray`: Real part of the wavelet coherence transform
+- `aWCT::AbstractArray`: Angle of wavelet coherence transform
+- `coi::AbstractArray`: Cone of influence - maximum period (in s) of useful
+    information at that particular time. Periods greater than
+    those are subject to edge effects.
+- `freqs::AbstractArray`: Fourier frequencies for wavelet scales [Hz].
+
+Original from pycwt and modified from Python implementation by Congcong Yuan
+"""
+function wct(y1::AbstractArray, y2::AbstractArray, dt::AbstractFloat, dj::AbstractFloat, freqbands::AbstractArray; f0=6.,norm::Bool=true)
+    # normalize signals
+    if norm
+        y1 = (y1 .- mean(y1)) ./ std(y1)
+        y2 = (y2 .- mean(y2)) ./ std(y2)
+    end
+
+    # calculate the CWT of the time series, using identical parameters for both calculations
+    W1, sj, freqs, coi = cwt(y1, dt, minimum(freqbands), maximum(freqbands))
+    W2, sj, freqs, coi = cwt(y2, dt, minimum(freqbands), maximum(freqbands))
+    W1=W1'
+    W2=W2'
+
+    scales = Array{Float64,2}(undef, size(W1))
+    for i=1:size(scales, 2)
+        scales[:,i] .= sj
+    end
+
+    # smooth wavelet spectra before truncating
+    S1 = smooth(abs.(W1).^2 ./ scales, dt, dj, sj)
+    S2 = smooth(abs.(W2).^2 ./ scales, dt, dj, sj)
+
+    # compute cross wavelet transform
+    W12 = W1 .* conj.(W2)
+
+    S12 = smooth(W12 ./ scales, dt, dj, sj)
+    WCT = abs.(S12).^2 ./ (S1 .* S2)
+    aWCT = angle.(W12)
+
+    # calculate cross spectrum and its amplitude
+    WXS = W12
+    WXA = abs.(S12)
+
+    return WXS, WXA, real.(WCT), aWCT, coi, freqs
 end

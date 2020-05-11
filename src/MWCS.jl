@@ -120,9 +120,9 @@ function mwcs(ref::AbstractArray,cur::AbstractArray,fmin::Float64,
     X = fref .* conj.(fcur)
 
     if smoothing_half_win != 0
-        dcur = sqrt.(smooth(fcur2,smoothing_half_win))
-        dref = sqrt.(smooth(fref2,smoothing_half_win))
-        X = smooth(X, smoothing_half_win)
+        dcur = sqrt.(SeisNoise.smooth(fcur2,half_win=smoothing_half_win))
+        dref = sqrt.(SeisNoise.smooth(fref2,half_win=smoothing_half_win))
+        X = SeisNoise.smooth(X, half_win=smoothing_half_win)
     else
         dcur = sqrt.(fcur2)
         dref = sqrt.(fref2)
@@ -163,8 +163,7 @@ function mwcs(ref::AbstractArray,cur::AbstractArray,fmin::Float64,
         sx2 = sum(w[:,ii] .* v.^2)
         err[ii] = sqrt(e * s2x2 / sx2^2)
     end
-    dt ./= 2π
-    err ./= 2π
+
     return time_axis, dt, err, mcoh
 end
 
@@ -204,11 +203,11 @@ at time t. Solves with a weighted linear regression with weights equal to
 
 # Returns
 - `m::Float64`: dt/t for current correlation
-- `em::Float64`: Error for calulatoin of `m`
+- `em::Float64`: Error for calculation of `m`
 - `a::Float64`: Intercept for regression calculation
 - `ea::Float64`: Error on intercept
 - `m0::Float64`: dt/t for current correlation with no intercept
-- `em0::Float64`: Error for calulatoin of `m0`
+- `em0::Float64`: Error for calculation of `m0`
 """
 function mwcs_dvv(time_axis::AbstractArray, dt::AbstractArray,
                      err::AbstractArray, coh::AbstractArray, dtt_lag::String,
