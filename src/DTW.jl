@@ -1,104 +1,86 @@
-export dtwdt, dtw_dvv, computeErrorFunction, accumulateErrorFunction, backtrackDistanceFunction, computeDTWerror
+export dtw, dtwdt, dtw_dvv, computeErrorFunction, accumulateErrorFunction, backtrackDistanceFunction, computeDTWerror
+
 
 """
+    dtw(ref, cur, t, window, fs; dtwnorm='L2', maxlag=80, b=1, direction=1)
 
-    dtwdt(u0, u1, dt; dtwnorm='L2', maxlag=80, b=1, direction=1)
-
-returns minimum distance time lag and index in dist array, and dtw error between traces.
+Returns minimum distance time lag and index in dist array, and dtw error between traces.
 
 # Arguments
-- `u0::AbstractArray`: time series #1
-- `u1::AbstractArray`: time series #2
-- `dt::Float64`: time step
-- `dtwnorm::String`: norm used to calculate distance; effect on the unit of dtw error. (L2 or L1)
--  Note: L2 is not squard, thus distance is calculated as (u1[i]-u0[j])^2
-- `maxlag::Int64`: number of maxLag id to search the distance.
+- `ref::AbstractArray`: Reference time series
+- `cur::AbstractArray`: Current time series
+- `t::AbstractArray`: Time axis common to both signals
+- `window::AbstractArray`: Indices for a subset of t over which to measure phase lags
+- `fs::Float64`: Sampling frequency
+- `dtwnorm::String`: Norm used to calculate distance; effect on the unit of dtw error. (L2 or L1)
+- `maxlag::Int64`: Number of maxLag id to search the distance.
 - `b::Int64t`: b value to controll in distance calculation algorithm (see Mikesell et al. 2015).
-- `direction::Int64`: length of noise data window, in seconds, to cross-correlate.
+- `direction::Int64`: Direction of error accumulation (1=forward, -1=backward, 0=double to smooth)
 
 # Returns
-- `stbarTime::Array{Float64,1}`: series of time shift at t.
-- `stbar::Array{Int64,1}`: series of minimum distance index in distance array.
-- `dist::Array{Int64,2}`: distance array.
-- `dtwerror::Float64`: dtw error (distance) between two time series.
+- `dvv::Float64`: dv/v for current correlation
+- `dvv_err::Float64`: Error for calculation of dv/v
+- `int::Float64`: Intercept for regression calculation
+- `int_err::Float64`: Error for intercept
+- `dvv0::Float64`: dv/v for current correlation forced through the origin
+- `dvv0_err::Float64`: Error for calculation of dvv0
 """
-function dtwdt(u0::AbstractArray, u1::AbstractArray, dt::Float64;
-    dtwnorm::String="L2",     #norm to calculate distance; effect on the unit of dtw error
-    maxLag::Int64=80,         #number of maxLag id to search the distance
-    b::Int64=1,               #b value to controll in distance calculation algorithm (see Mikesell et al. 2015)
-    direction::Int64=1,       #direction to accumulate errors (1=forward, -1=backward, 0=double to smooth)
-    )
+function dtw(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64;
+    dtwnorm::String="L2",
+    maxLag::Int64=80,
+    b::Int64=1,
+    direction::Int64=1,
+    norm::Bool=true)
 
-    #prepare datasize and time vector
-    lvec   = (-maxLag:maxLag).*dt; # lag array for plotting below
-    npts   = length(u0);            # number of samples
-    if length(u0) != length(u1) error("u0 and u1 must be same length.") end
-    tvec   = ( 0 : npts-1 ) .* dt; # make the time axis
+    # measure phase shifts
+    stbarTime, stbar, dist, error = dtwdt(ref, cur, t, window, fs, maxLag=maxLag, b=b, direction=direction)
+    # perform linear regression of dt/t=-dv/v
+    dvv, dvv_err, int, int_err, dvv0, dvv0_err = dtw_dvv(t[window], stbarTime)
 
-    #compute distance between traces
-    err = computeErrorFunction(u1, u0, npts, maxLag, norm=dtwnorm);
-
-    #compute distance array and backtrack index
-    if direction == 1 || direction == -1
-        dist  = accumulateErrorFunction(direction, err, npts, maxLag, b); # forward accumulation to make distance function
-        stbar = backtrackDistanceFunction( -1*direction, dist, err, -maxLag, b ); # find shifts
-    elseif direction == 0
-        #calculate double time to smooth distance array
-        dist1 = accumulateErrorFunction( -1, err, npts, maxLag, b ); # forward accumulation to make distance function
-        dist2 = accumulateErrorFunction( 1, err, npts, maxLag, b ); # backwward accumulation to make distance function
-        dist  = dist1 .+ dist2 .- err; # add them and remove 'err' to not count twice (see Hale's paper)
-        stbar = backtrackDistanceFunction( -1, dist, err, -maxLag, b );
-    else
-        error("direction must be +1, -1 or 0(smoothing).")
-    end
-
-    stbarTime = stbar .* dt;      # convert from samples to time
-    tvec2     = tvec + stbarTime; # make the warped time axis
-
-    #accumulate distance in distance array to calculate dtw error
-    error = computeDTWerror( err, stbar, maxLag );
-
-    return stbarTime, stbar, dist, error
+    return dvv, dvv_err, int, int_err, dvv0, dvv0_err
 end
 
 """
 
-    dtwdt(u0, u1, dt, freqbands; dtwnorm='L2', maxlag=80, b=1, direction=1, norm=true)
+    dtw(ref, cur, t, window, fs, freqbands; dtwnorm='L2', maxlag=80, b=1, direction=1, norm=true)
 
 returns minimum distance time lag and index in dist array, and dtw error between traces.
 
 # Arguments
-- `u0::AbstractArray`: time series #1
-- `u1::AbstractArray`: time series #2
-- `dt::Float64`: time step
+- `ref::AbstractArray`: Reference time series
+- `cur::AbstractArray`: Current time series
+- `t::AbstractArray`: Time axis common to both signals
+- `window::AbstractArray`: Indices for a subset of t over which to measure phase lags
+- `fs::Float64`: Sampling frequency
 - `freqbands::AbstractArray`: Frequency bands over which to compute dv/v
-- `dtwnorm::String`: norm used to calculate distance; effect on the unit of dtw error. (L2 or L1)
--  Note: L2 is not squard, thus distance is calculated as (u1[i]-u0[j])^2
-- `maxlag::Int64`: number of maxLag id to search the distance.
+- `dtwnorm::String`: Norm used to calculate distance; effect on the unit of dtw error. (L2 or L1)
+- `maxlag::Int64`: Number of maxLag id to search the distance.
 - `b::Int64t`: b value to controll in distance calculation algorithm (see Mikesell et al. 2015).
-- `direction::Int64`: length of noise data window, in seconds, to cross-correlate.
+- `direction::Int64`: Direction of error accumulation (1=forward, -1=backward, 0=double to smooth)
 - `norm::Bool`: Whether or not to normalize signals before dv/v
 
 # Returns
-- `-dtt::AbstractArray`: dv/v for current correlation for a range of frequencies
-- `err::Float64`: Error for calculation of dv/v for a range of frequencies
-- `a::Float64`: Intercept for regression calculation
-- `ea::Float64`: Error on intercept
-- `m0::Float64`: dt/t for current correlation with no intercept
-- `em0::Float64`: Error for calculation of `m0`
+- `freqbands::AbstractArray`: Array of frequencies where dv/v was measured
+- `dvv::Float64`: dv/v for current correlation for a range of frequencies
+- `dvv_err::Float64`: Error for calculation of dv/v for a range of frequencies
+- `int::Float64`: Intercept for regression calculation
+- `int_err::Float64`: Error for intercept
+- `dvv0::Float64`: dv/v for current correlation forced through the origin
+- `dvv0_err::Float64`: Error for calculation of dvv0 for a range of frequencies
 """
-function dtwdt(u0::AbstractArray, u1::AbstractArray, dt::Float64, freqbands::AbstractArray;
-    dtwnorm::String="L2",     #norm to calculate distance; effect on the unit of dtw error
-    maxLag::Int64=80,         #number of maxLag id to search the distance
-    b::Int64=1,               #b value to controll in distance calculation algorithm (see Mikesell et al. 2015)
-    direction::Int64=1,       #direction to accumulate errors (1=forward, -1=backward, 0=double to smooth)
+function dtw(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64, freqbands::AbstractArray;
+    dtwnorm::String="L2",
+    maxLag::Int64=80,
+    b::Int64=1,
+    direction::Int64=1,
     norm::Bool=true)
+
     # define sample frequency
-    fs = 1/dt
+    dt = 1/fs
 
     # calculate the CWT of the time series, using identical parameters for both calculations
-    cwt1, sj, freqs, coi = cwt(u0, dt, minimum(freqbands), maximum(freqbands))
-    cwt2, sj, freqs, coi = cwt(u1, dt, minimum(freqbands), maximum(freqbands))
+    cwt1, sj, freqs, coi = cwt(ref, dt, minimum(freqbands), maximum(freqbands))
+    cwt2, sj, freqs, coi = cwt(cur, dt, minimum(freqbands), maximum(freqbands))
 
     # if a frequency window is given (instead of a set of frequency bands), we assume
     # dv/v should be calculated for each frequency. We construct a 2D array of the
@@ -110,12 +92,12 @@ function dtwdt(u0::AbstractArray, u1::AbstractArray, dt::Float64, freqbands::Abs
     (nbands,_) = size(freqbands)
 
     # initialize arrays
-    dtt = zeros(nbands)
-    err = similar(dtt)
-    a = similar(dtt)
-    ea = similar(dtt)
-    m0 = similar(dtt)
-    em0 = similar(dtt)
+    dvv = zeros(nbands)
+    dvv_err = similar(dvv)
+    int = similar(dvv)
+    int_err = similar(dvv)
+    dvv0 = similar(dvv)
+    dvv0_err = similar(dvv)
 
     # loop over frequency bands
     for iband=1:nbands
@@ -137,25 +119,85 @@ function dtwdt(u0::AbstractArray, u1::AbstractArray, dt::Float64, freqbands::Abs
 
         # normalize both signals, if appropriate
         if norm
-            ncwt1 = ((wcwt1 .- mean(wcwt1)) ./ std(wcwt1))[:]
-            ncwt2 = ((wcwt2 .- mean(wcwt2)) ./ std(wcwt2))[:]
+            ncwt1 = ((wcwt1 .- mean(wcwt1)) ./ std(wcwt1))
+            ncwt2 = ((wcwt2 .- mean(wcwt2)) ./ std(wcwt2))
         else
-            ncwt1 = wcwt1[:]
-            ncwt2 = wcwt2[:]
+            ncwt1 = wcwt1
+            ncwt2 = wcwt2
         end
 
         # perform dv/v
-        stbarTime, stbar, dist, error = dtwdt(ncwt1, ncwt2, dt, maxLag=maxLag, b=b, direction=direction)
+        stbarTime, stbar, dist, error = dtwdt(ncwt1, ncwt2, t, window, fs, maxLag=maxLag, b=b, direction=direction)
         # perform linear regression
-        dtt[iband], err[iband], a[iband], ea[iband], m0[iband], em0[iband] = dtw_dvv(collect(1:length(u0))*dt, stbarTime)
+        dvv[iband], dvv_err[iband], int[iband], int_err[iband], dvv0[iband], dvv0_err[iband] = dtw_dvv(t[window], stbarTime)
     end
 
-    return freqbands, -dtt, err, a, ea, m0, em0
+    return freqbands, dvv, dvv_err, int, int_err, dvv0, dvv0_err
+end
+
+"""
+
+    dtwdt(u0, u1, t, window, fs; dtwnorm='L2', maxlag=80, b=1, direction=1)
+
+returns minimum distance time lag and index in dist array, and dtw error between traces.
+
+# Arguments
+- `u0::AbstractArray`: Time series #1
+- `u1::AbstractArray`: Time series #2
+- `t::AbstractArray`: Time axis common to both signals
+- `window::AbstractArray`: Indices for a subset of t over which to measure phase lags
+- `fs::Float64`: Sampling frequency
+- `dtwnorm::String`: Norm used to calculate distance; effect on the unit of dtw error. (L2 or L1)
+- `maxlag::Int64`: Maximum distance in samples to search for best phase lag
+- `b::Int64t`: Value to control in distance calculation algorithm (see Mikesell et al. 2015).
+- `direction::Int64`: Direction of error accumulation (1=forward, -1=backward, 0=double to smooth)
+
+# Returns
+- `stbarTime::Array{Float64,1}`: Series of time shift at t.
+- `stbar::Array{Int64,1}`: Series of minimum distance index in distance array.
+- `dist::Array{Int64,2}`: Distance array.
+- `error::Float64`: DTW error (distance) between two time series.
+"""
+function dtwdt(u0::AbstractArray, u1::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64;
+    dtwnorm::String="L2",
+    maxLag::Int64=80,
+    b::Int64=1,
+    direction::Int64=1)
+
+    npts = length(window) # number of samples in the signal subset we consider
+
+    # check signal length before computing distances
+    if length(u0) != length(u1) error("u0 and u1 must be same length.") end
+
+    #compute distance between traces
+    err = computeErrorFunction(u0[window], u1[window], npts, maxLag, norm=dtwnorm)
+
+    #compute distance array and backtrack index
+    if direction == 1 || direction == -1
+        dist  = accumulateErrorFunction(direction, err, npts, maxLag, b) # forward accumulation to make distance function
+        stbar = backtrackDistanceFunction(-direction, dist, err, -maxLag, b) # find shifts
+    elseif direction == 0
+        #calculate double time to smooth distance array
+        dist1 = accumulateErrorFunction(-1, err, npts, maxLag, b) # forward accumulation to make distance function
+        dist2 = accumulateErrorFunction(1, err, npts, maxLag, b) # backwward accumulation to make distance function
+        dist  = dist1 .+ dist2 .- err; # add them and remove 'err' to not count twice (see Hale's paper)
+        stbar = backtrackDistanceFunction(-1, dist, err, -maxLag, b)
+    else
+        error("direction must be +1, -1 or 0(smoothing).")
+    end
+
+    stbarTime = stbar ./ fs # convert units from samples to time
+    t2 = t[window] + stbarTime # warp the time axis
+
+    #accumulate distance in distance array to calculate dtw error
+    error = computeDTWerror(err, stbar, maxLag)
+
+    return stbarTime, stbar, dist, error
 end
 
 
 """
-    dtw_dvv(X, Y)
+    dtw_dvv(time_axis, dt)
 
 Linear regression of phase shifts to time to give dt/t=-dv/v
 
@@ -178,10 +220,10 @@ function dtw_dvv(time_axis::AbstractArray, dt::AbstractArray)
     model = glm(@formula(Y ~ X),DataFrame(X=time_axis,Y=dt),Normal(),
                 IdentityLink(),wts=ones(length(time_axis)))
 
-    a,m = coef(model).*100
+    a,m = -coef(model).*100
     ea, em = stderror(model).*100
 
-    m0 = coef(model0)[1]*100
+    m0 = -coef(model0)[1]*100
     em0 = stderror(model0)[1]*100
 
     return m, em, a, ea, m0, em0
