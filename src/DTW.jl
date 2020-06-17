@@ -180,7 +180,7 @@ function dtwdt(u0::AbstractArray, u1::AbstractArray, t::AbstractArray, window::A
         #calculate double time to smooth distance array
         dist1 = accumulateErrorFunction(-1, err, npts, maxLag, b) # forward accumulation to make distance function
         dist2 = accumulateErrorFunction(1, err, npts, maxLag, b) # backwward accumulation to make distance function
-        dist  = dist1 .+ dist2 .- err; # add them and remove 'err' to not count twice (see Hale's paper)
+        dist  = dist1 .+ dist2 .- err # add them and remove 'err' to not count twice (see Hale's paper)
         stbar = backtrackDistanceFunction(-1, dist, err, -maxLag, b)
     else
         error("direction must be +1, -1 or 0(smoothing).")
@@ -249,22 +249,22 @@ https://doi.org/10.1190/geo2012-0327.1
 """
 function computeErrorFunction(u1::AbstractArray, u0::AbstractArray, nSample::Int64, lag::Int64; norm::String="L2")
     if lag >= nSample
-        error("computeErrorFunction:lagProblem ","lag must be smaller than nSample");
+        error("computeErrorFunction:lagProblem ","lag must be smaller than nSample")
     end
 
     # Allocate error function variable
-    err = zeros(Float64, nSample, 2 * lag + 1 );
+    err = zeros(Float64, nSample, 2 * lag + 1 )
 
     # initial error calculation
     for ll = -lag:lag # loop over lags
-        thisLag = ll + lag + 1;
+        thisLag = ll + lag + 1
         for ii = 1:nSample # loop over samples
             if ( ii + ll >= 1 && ii + ll <= nSample ) # skip corners for now, we will come back to these
-                diff = u1[ii] - u0[ii + ll]; # sample difference
+                diff = u1[ii] - u0[ii + ll] # sample difference
                 if norm == "L2"
-                        err[ii, thisLag] = diff^2; # difference squared error
+                        err[ii, thisLag] = diff^2 # difference squared error
                 elseif norm == "L1"
-                        err[ii, thisLag] = abs(diff); # absolute value errors
+                        err[ii, thisLag] = abs(diff) # absolute value errors
                 else
                     error("norm type is not defined.")
                 end
@@ -274,12 +274,12 @@ function computeErrorFunction(u1::AbstractArray, u0::AbstractArray, nSample::Int
 
     # Now fix corners with constant extrapolation
     for ll = -lag:lag # loop over lags
-        thisLag = ll + lag + 1;
+        thisLag = ll + lag + 1
         for ii = 1:nSample # loop over samples
             if ( ii + ll < 1 ) # lower left corner (negative lag, early time)
-                err[ii, thisLag] = err[-ll + 1, thisLag];
+                err[ii, thisLag] = err[-ll + 1, thisLag]
             elseif ( ii + ll > nSample ) # upper right corner (positive lag, late time)
-                err[ii, thisLag] = err[nSample - ll, thisLag];
+                err[ii, thisLag] = err[nSample - ll, thisLag]
             end
         end
     end
@@ -306,62 +306,62 @@ The function is equation 6 in Hale, 2013.
 Original by Di Yang Last modified by Dylan Mikesell (25 Feb. 2015)
 """
 function accumulateErrorFunction(dir::Int64, err::Array{Float64,2}, nSample::Int64, lag::Int64, b::Int64)
-    nLag = (2 * lag ) + 1; # number of lags from [ -lag : +lag ]
+    nLag = (2 * lag ) + 1 # number of lags from [ -lag : +lag ]
 
     # allocate distance matrix
-    d = zeros(Float64, nSample, nLag);
+    d = zeros(Float64, nSample, nLag)
 
     #--------------------------------------------------------------------------
     # Setup indices based on forward or backward accumulation direction
     #--------------------------------------------------------------------------
     if dir > 0            # FORWARD
-        iBegin = 1;       # start index
-        iEnd   = nSample; # end index
-        iInc   = 1;       # increment
+        iBegin = 1        # start index
+        iEnd   = nSample  # end index
+        iInc   = 1        # increment
     else                  # BACKWARD
-        iBegin = nSample; # start index
-        iEnd   = 1;       # stop index
-        iInc   = -1;      # increment
+        iBegin = nSample  # start index
+        iEnd   = 1        # stop index
+        iInc   = -1       # increment
     end
 
     #--------------------------------------------------------------------------
     # Loop through all times ii in forward or backward direction
     for ii = iBegin:iInc:iEnd
         # min/max to account for the edges/boundaries
-        ji = max(1, min(nSample, ii - iInc ));     # i-1 index
-        jb = max(1, min(nSample, ii - iInc * b )); # i-b index
+        ji = max(1, min(nSample, ii - iInc ))     # i-1 index
+        jb = max(1, min(nSample, ii - iInc * b )) # i-b index
 
         # loop through all lags l
         for ll = 1:nLag
             # -----------------------------------------------------------------
             # check limits on lag indices
-            lMinus1 = ll - 1; # lag at l-1
+            lMinus1 = ll - 1 # lag at l-1
 
             if lMinus1 < 1  # check lag index is greater than 1
-                lMinus1 = 1; # make lag = first lag
+                lMinus1 = 1 # make lag = first lag
             end
 
-            lPlus1 = ll + 1; # lag at l+1
+            lPlus1 = ll + 1 # lag at l+1
 
             if lPlus1 > nLag # check lag index less than max lag
-                lPlus1 = nLag; # D.M. version
+                lPlus1 = nLag # D.M. version
             end
             # -----------------------------------------------------------------
 
             # get distance at lags (ll-1, ll, ll+1)
-            distLminus1 = d[jb, lMinus1]; # minus:  d( i-b, j-1 )
-            distL       = d[ji, ll];      # actual: d( i-1, j   )
-            distLplus1  = d[jb, lPlus1];  # plus:   d( i-b, j+1 )
+            distLminus1 = d[jb, lMinus1] # minus:  d( i-b, j-1 )
+            distL       = d[ji, ll]      # actual: d( i-1, j   )
+            distLplus1  = d[jb, lPlus1]  # plus:   d( i-b, j+1 )
 
             if ji != jb # equation 10 in Hale (2013)
                 for kb = ji:-iInc:jb+iInc # sum errors over i-1:i-b+1
-                    distLminus1 = distLminus1 + err[kb, lMinus1];
-                    distLplus1  = distLplus1  + err[kb, lPlus1];
+                    distLminus1 = distLminus1 + err[kb, lMinus1]
+                    distLplus1  = distLplus1  + err[kb, lPlus1]
                 end
             end
 
             # equation 6 (if b=1) or 10 (if b>1) in Hale (2013) after treating boundaries
-            d[ii, ll] = err[ii, ll] + min(distLminus1, distL, distLplus1);
+            d[ii, ll] = err[ii, ll] + min(distLminus1, distL, distLplus1)
         end
     end
     return d
@@ -386,92 +386,92 @@ See equation 2 in Hale, 2013.
 Original by Di Yang and modified from DTWDT.jl by Kurama Okubo
 """
 function backtrackDistanceFunction(dir::Int64, d::Array{Float64,2}, err::Array{Float64,2}, lmin::Int64, b::Int64)
-    nSample = size(d,1); # number of samples
-    nLag    = size(d,2); # number of lags
-    stbar   = zeros(Int64, nSample); # allocate
+    nSample = size(d,1) # number of samples
+    nLag    = size(d,2) # number of lags
+    stbar   = zeros(Int64, nSample) # allocate
 
     #--------------------------------------------------------------------------
     # Setup indices based on forward or backward accumulation direction
     #--------------------------------------------------------------------------
     if dir > 0            # FORWARD
-        iBegin = 1;       # start index
-        iEnd   = nSample; # end index
-        iInc   = 1;       # increment
+        iBegin = 1        # start index
+        iEnd   = nSample  # end index
+        iInc   = 1        # increment
     else                  # BACKWARD
-        iBegin = nSample; # start index
-        iEnd   = 1;       # stop index
-        iInc   = -1;      # increment
+        iBegin = nSample  # start index
+        iEnd   = 1        # stop index
+        iInc   = -1       # increment
     end
     #--------------------------------------------------------------------------
     # start from the end (front or back)
-    ll0 = argmin(d[iBegin,:]); # find minimum accumulated distance at front or back depending on 'dir'
-    stbar[iBegin] = ll0 + lmin - 1; # absolute value of integer shift
+    ll0 = argmin(d[iBegin,:]) # find minimum accumulated distance at front or back depending on 'dir'
+    stbar[iBegin] = ll0 + lmin - 1 # absolute value of integer shift
     #--------------------------------------------------------------------------
     # move through all time samples in forward or backward direction
-    ii = iBegin;
+    ii = iBegin
 
     while ii != iEnd
         if ii == iBegin
-            ll = ll0;
+            ll = ll0
         else
             ll = ll_next
         end
 
         # min/max for edges/boundaries
-        ji = max( 1, min(nSample, ii + iInc) );
-        jb = max( 1, min(nSample, ii + iInc * b) );
+        ji = max( 1, min(nSample, ii + iInc) )
+        jb = max( 1, min(nSample, ii + iInc * b) )
 
         # -----------------------------------------------------------------
         # check limits on lag indices
 
-        lMinus1 = ll - 1; # lag at l-1
+        lMinus1 = ll - 1 # lag at l-1
 
         if lMinus1 < 1 # check lag index is greater than 1
-            lMinus1 = 1; # make lag = first lag
+            lMinus1 = 1 # make lag = first lag
         end
 
-        lPlus1 = ll + 1; # lag at l+1
+        lPlus1 = ll + 1 # lag at l+1
 
         if lPlus1 > nLag # check lag index less than max lag
-            lPlus1 = nLag; # D.M. and D.Y. version
+            lPlus1 = nLag # D.M. and D.Y. version
         end
         # -----------------------------------------------------------------
         # get distance at lags (ll-1, ll, ll+1)
-        distLminus1 = d[jb, lMinus1]; # minus:  d( i-b, j-1 )
-        distL       = d[ji, ll];      # actual: d( i-1, j   )
-        distLplus1  = d[jb, lPlus1];  # plus:   d( i-b, j+1 )
+        distLminus1 = d[jb, lMinus1] # minus:  d( i-b, j-1 )
+        distL       = d[ji, ll]      # actual: d( i-1, j   )
+        distLplus1  = d[jb, lPlus1]  # plus:   d( i-b, j+1 )
 
         if ji != jb # equation 10 in Hale (2013)
             for kb = ji:iInc:jb-iInc # sum errors over i-1:i-b+1
-                distLminus1 = distLminus1 + err[kb, lMinus1];
-                distLplus1  = distLplus1  + err[kb, lPlus1];
+                distLminus1 = distLminus1 + err[kb, lMinus1]
+                distLplus1  = distLplus1  + err[kb, lPlus1]
             end
         end
 
-        dl = min(distLminus1, distL, distLplus1); # update minimum distance to previous sample
+        dl = min(distLminus1, distL, distLplus1) # update minimum distance to previous sample
 
         if ( dl != distL ) # then ll != ll and we check forward and backward
             if ( dl == distLminus1 )
-                global ll_next = lMinus1;
+                global ll_next = lMinus1
             else # ( dl == lPlus1 )
-                global ll_next = lPlus1;
+                global ll_next = lPlus1
             end
         else
             ll_next = ll
         end
 
         # assume ii = ii - 1
-        ii += iInc; # previous time sample
+        ii += iInc # previous time sample
 
-        stbar[ii] = ll_next + lmin - 1; # absolute integer of lag
+        stbar[ii] = ll_next + lmin - 1 # absolute integer of lag
         # now move to correct time index, if smoothing difference over many
         # time samples using 'b'
 
         if ( ll_next == lMinus1 || ll_next == lPlus1 ) # check edges to see about b values
             if ( ji != jb ) # if b>1 then need to move more steps
                 for kb = ji:iInc:jb - iInc
-                    ii = ii + iInc; # move from i-1:i-b-1
-                    stbar[ii] = ll_next + lmin - 1; # constant lag over that time
+                    ii = ii + iInc # move from i-1:i-b-1
+                    stbar[ii] = ll_next + lmin - 1 # constant lag over that time
                 end
             end
         end
@@ -498,18 +498,18 @@ Compute the accumulated error along the warping path for DTW
 Original by Dylan Mikesell and modified from DTWDT.jl by Kurama Okubo
 """
 function computeDTWerror(Aerr::Array{Float64,2}, u::Array{Int64,1}, lag0::Int)
-    npts = length(u);
+    npts = length(u)
 
     if size(Aerr,1) != npts
         error("Funny things with dimensions of error matrix: check inputs.")
     end
 
-    error = 0; # initialize
+    error = 0 # initialize
 
     # accumulate error
     for ii = 1:npts
-        idx = lag0 + 1 + u[ii]; # index of lag
-        error += Aerr[ii,idx]; # sum error
+        idx = lag0 + 1 + u[ii] # index of lag
+        error += Aerr[ii,idx] # sum error
     end
 
     return error
