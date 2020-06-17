@@ -24,7 +24,7 @@ the current waveform.
 - `ntrial::Int`:  number of stretching coefficient between dvmin and dvmax, no need to be higher than 100
 
 # Returns
-- `dv::AFloat64`: Relative Velocity Change dv/v (in %)
+- `dvv::Float64`: Relative Velocity Change dv/v (in %)
 - `cc::Float64`: Correlation coefficient between the reference waveform and the
                       best stretched/compressed current waveform
 - `cdp::Float64`: Correlation coefficient between the reference waveform and the
@@ -37,9 +37,9 @@ the current waveform.
 
 This code is a Julia translation of the Python code from [Viens et al., 2018](https://github.com/lviens/2018_JGR).
 """
-function stretching(ref::AbstractArray,cur::AbstractArray,t::AbstractArray,
-                    window::AbstractArray,fmin::Float64,fmax::Float64;
-                    dvmin::Float64=-0.1,dvmax::Float64=0.1,ntrial::Int=100)
+function stretching(ref::AbstractArray, cur::AbstractArray, t::AbstractArray,
+                    window::AbstractArray, fmin::Float64, fmax::Float64;
+                    dvmin::Float64=-0.1, dvmax::Float64=0.1, ntrial::Int=100)
     ϵ = range(dvmin, stop=dvmax, length=ntrial)
     L = 1. .+ ϵ
     tau = t * L'
@@ -68,7 +68,7 @@ function stretching(ref::AbstractArray,cur::AbstractArray,t::AbstractArray,
     # using Dierckx; etp = Spline1D(ϵ[range(imax-3,stop=imax+1)],allC[range(imax-3,stop=imax+1)])
     etp = CubicSplineInterpolation(ϵ[range(imax-3,stop=imax+1)],allC[range(imax-3,stop=imax+1)])
     CCfiner = etp(dtfiner)
-    dv = 100. * dtfiner[argmax(CCfiner)]
+    dvv = 100. * dtfiner[argmax(CCfiner)]
     cc = maximum(CCfiner) # Maximum correlation coefficient of the refined analysis
 
     # Error computation based on Weaver, R., C. Hadziioannou, E. Larose, and M.
@@ -76,6 +76,11 @@ function stretching(ref::AbstractArray,cur::AbstractArray,t::AbstractArray,
     # Geophys. J. Int., 185(3), 1384?1392
     T = 1 / (fmax - fmin)
     X = cc
+    # extremely similar signals can return cc>1.0 (not possible), so we limit cc to 1.0 to prevent sqrt(neg)
+    if X > 1.0
+        X=1.0
+    end
+
     wc = π * (fmin + fmax)
     tmin = t[window][1]
     tmax = t[window][end]
@@ -83,7 +88,7 @@ function stretching(ref::AbstractArray,cur::AbstractArray,t::AbstractArray,
     t2 = maximum([tmin,tmax])
     err = 100 * (sqrt(1-X^2)/(2*X)*sqrt((6*sqrt(π/2)*T)/(wc^2*(t2^3-t1^3))))
 
-    return dv,cc,cdp,Array(ϵ),err,allC
+    return dvv,cc,cdp,Array(ϵ),err,allC
 end
 
 """
@@ -110,7 +115,7 @@ coefficient between the Reference waveform and the current waveform.
 - `ntrial::Int`:  number of stretching coefficient between dvmin and dvmax, no need to be higher than 100
 
 # Returns
-- `dv::Array{Float64,1}`: Relative Velocity Change dv/v (in %)
+- `dvv::Array{Float64,1}`: Relative Velocity Change dv/v (in %)
 - `cc::Array{Float64,1}`: Correlation coefficient between the reference waveform and the
                       best stretched/compressed current waveform
 - `cdp::Array{Float64,1}`: Correlation coefficient between the reference waveform and the
@@ -122,12 +127,12 @@ coefficient between the Reference waveform and the current waveform.
                         current waveforms
 """
 function stretching(C::CorrData, t::AbstractArray, window::AbstractArray,
-                    fmin::Float64,fmax::Float64; dvmin::Float64=-0.1,
-                    dvmax::Float64=0.1,ntrial::Int=100)
+                    fmin::Float64, fmax::Float64; dvmin::Float64=-0.1,
+                    dvmax::Float64=0.1, ntrial::Int=100)
 
     N = length(C.t)
     ref = SeisNoise.stack(C,allstack=true)
-    dv = zeros(length(C.t))
+    dvv = zeros(length(C.t))
     cc = similar(dv)
     cdp = similar(dv)
     err = similar(dv)
@@ -135,7 +140,7 @@ function stretching(C::CorrData, t::AbstractArray, window::AbstractArray,
     lags = -ref.maxlag:1/ref.fs:ref.maxlag
 
     for ii = 1:N
-        dv[ii], cc[ii], cdp[ii], ϵ, err[ii], allC[:,ii] = stretching(ref.corr[:],
+        dvv[ii], cc[ii], cdp[ii], ϵ, err[ii], allC[:,ii] = stretching(ref.corr[:],
                                                             C.corr[:,ii],
                                                             lags,
                                                             window,
@@ -146,7 +151,8 @@ function stretching(C::CorrData, t::AbstractArray, window::AbstractArray,
                                                             ntrial=ntrial)
     end
     ϵ = collect(range(dvmin, stop=dvmax, length=ntrial))
-    return dv, cc, cdp, ϵ, err, allC
+
+    return dvv, cc, cdp, ϵ, err, allC
 end
 
 """
@@ -173,24 +179,25 @@ coefficient between the Reference waveform and the current waveform.
 - `norm::Bool`: Whether or not to normalize signals before dv/v
 
 # Returns
-- `dv::Array{Float64,1}`: Relative Velocity Change dv/v (in %)
+- `freqbands::AbstractArray`: Array of frequencies where dv/v was measured
+- `dvv::Array{Float64,1}`: Relative Velocity Change dv/v (in %)
 - `cc::Array{Float64,1}`: Correlation coefficient between the reference waveform and the
                       best stretched/compressed current waveform
 - `cdp::Array{Float64,1}`: Correlation coefficient between the reference waveform and the
                  initial current waveform
+- `ϵ::Array{Float64,1}`: Vector of Epsilon values (ϵ =-dt/t = dv/v)
 - `err::Array{Float64,1}`: Errors in the dv/v measurements based on [Weaver et al., 2011](https://onlinelibrary.wiley.com/doi/full/10.1111/j.1365-246X.2011.05015.x)
-- `freqbands::Array{Float64,2}`: 
 """
-function stretching(ref::AbstractArray,cur::AbstractArray,t::AbstractArray,
-                    window::AbstractArray,freqbands::AbstractArray;
-                    dvmin::Float64=-0.1,dvmax::Float64=0.1,ntrial::Int=100, norm::Bool=true)
+function stretching(ref::AbstractArray, cur::AbstractArray, t::AbstractArray,
+                    window::AbstractArray, freqbands::AbstractArray;
+                    dvmin::Float64=-0.1, dvmax::Float64=0.1, ntrial::Int=100, norm::Bool=true)
      # define sampling interval
      dt = mean(diff(t))
      fs = 1/dt
 
      # calculate the CWT of the time series, using identical parameters for both calculations
-     cwt1, sj, freqs, coi = cwt(cur, dt, minimum(freqbands), maximum(freqbands))
-     cwt2, sj, freqs, coi = cwt(ref, dt, minimum(freqbands), maximum(freqbands))
+     cwt1, sj, freqs, coi = cwt(ref, dt, minimum(freqbands), maximum(freqbands))
+     cwt2, sj, freqs, coi = cwt(cur, dt, minimum(freqbands), maximum(freqbands))
 
      # if a frequency window is given (instead of a set of frequency bands), we assume
      # dv/v should be calculated for each frequency. We construct a 2D array of the
@@ -202,10 +209,11 @@ function stretching(ref::AbstractArray,cur::AbstractArray,t::AbstractArray,
      (nbands,_) = size(freqbands)
 
      # initialize dvv and err arrays
-     dv = zeros(nbands)
-     cc = similar(dv)
-     cdp = similar(dv)
-     err = similar(dv)
+     dvv = zeros(nbands)
+     cc = similar(dvv)
+     cdp = similar(dvv)
+     err = similar(dvv)
+     allC = zeros(ntrial, nbands)
 
      # loop over frequency bands
      for iband=1:nbands
@@ -234,8 +242,8 @@ function stretching(ref::AbstractArray,cur::AbstractArray,t::AbstractArray,
              ncwt2 = wcwt2[:]
          end
 
-         dv[iband], cc[iband], cdp[iband], ϵ, err[iband], allC = stretching(ncwt1, ncwt2, t, window, fmin, fmax, dvmin=dvmin, dvmax=dvmax, ntrial=ntrial)
+         dvv[iband], cc[iband], cdp[iband], ϵ, err[iband], allC[:,iband] = stretching(ncwt1, ncwt2, t, window, fmin, fmax, dvmin=dvmin, dvmax=dvmax, ntrial=ntrial)
      end
 
-     return freqbands, dv, cc, cdp, err
+     return freqbands, dvv, cc, cdp, ϵ, err, allC
 end
