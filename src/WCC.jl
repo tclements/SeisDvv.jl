@@ -9,33 +9,32 @@ Windowed cross-correlation following Snieder et al., 2012
 # Arguments
 - `ref::AbstractArray`: Input signal
 - `cur::AbstractArray`: Reference signal
+- `t::AbstractArray`: Time axis common to ref and cur
+- `window::AbstractArray`: Indices for a subset of t over which to measure phase lags
 - `fs::Float64`: Sampling frequency
-- `tmin::Float64`: Minimum time
 - `window_length::Float64`: Length of time window within which to find time shifts
 - `window_step::Float64`: Time step to advance window
-- `maxlag::Float64`: Maximum time to consider
 
 # Returns
 - `time_axis::AbstractArray`: Center times of windows
 - `dt::AbstractArray`: Time shifts
 - `err::AbstractArray`: Errors in time shift measurements
 """
-function WCC(ref::AbstractArray, cur::AbstractArray, fs::Float64, tmin::Float64,
-             window_length::Float64, window_step::Float64, maxlag::Float64)
+function WCC(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64,
+             window_length::Float64, window_step::Float64)
 
      # create time axis for mwcs
-     time_axis = Array(tmin + window_length / 2. : window_step : tmin +
-                       length(ref) / fs - window_length / 2.)
+     time_axis = Array(t[window[1]] + window_length / 2. : window_step :
+                       t[window[end]] - window_length / 2.)
 
      window_length_samples = convert(Int,window_length * fs)
      window_step_samples = convert(Int,window_step * fs)
-     minind = 1:window_step_samples:length(ref) - window_length_samples
+     minind = window[1]:window_step_samples:window[end] - window_length_samples
      padd = convert(Int,2 ^ (ceil(log2(abs(window_length_samples))) + 2))
 
      N = length(minind)
      dt = zeros(N)
      err = zeros(N)
-     time_axis = time_axis[1:N]
 
      cci = zeros(window_length_samples,N)
      cri = zeros(window_length_samples,N)
@@ -54,26 +53,16 @@ function WCC(ref::AbstractArray, cur::AbstractArray, fs::Float64, tmin::Float64,
      SeisNoise.detrend!(cri)
      SeisNoise.taper!(cri,fs,max_percentage=0.85)
 
-     # take fourier transform
-     fcur = rfft(cci,1)
-     fref = rfft(cri,1)
-
-     # calculate cross-correlation
-     xcorr = irfft(conj.(fref) .* fcur, window_length_samples, 1)
-     xcorr ./= sqrt.(sum(cci.^2, dims=1) .* sum(cri.^2, dims=1))[1]
-
-     # return corr[-maxlag:maxlag]
-     t = vcat(0:Int(window_length_samples/2)-1, -Int(window_length_samples/2):-1)
-     ind = findall(abs.(t) .<= maxlag*fs)
-     newind = FFTW.fftshift(ind,1)
-     xcorr = xcorr[newind,:]
+     xcorr = zeros(2*window_length_samples-1, N)
+     for ii=1:N
+         xcorr[:,ii] = DSP.xcorr(cci[:,ii], cri[:,ii])
+     end
 
      # get maximum correlation coefficient and its index
      cc_max, cc_max_ind = findmax(xcorr, dims=1)
      cc_max_ind = [cc_max_ind[i][1] for i=1:length(cc_max_ind)]
-
      # get time shift
-     dt = (cc_max_ind .- fld(window_length_samples, 2))/fs
+     dt = (cc_max_ind .- window_length_samples)/fs
 
      return time_axis, dt, cc_max
 end
@@ -87,11 +76,11 @@ Windowed cross-correlation following Snieder et al., 2012
 # Arguments
 - `ref::AbstractArray`: Input signal
 - `cur::AbstractArray`: Reference signal
+- `t::AbstractArray`: Time axis common to ref and cur
+- `window::AbstractArray`: Indices for a subset of t over which to measure phase lags
 - `fs::Float64`: Sampling frequency
-- `tmin::Float64`: Minimum time
 - `window_length::Float64`: Length of time window within which to find time shifts
 - `window_step::Float64`: Time step to advance window
-- `maxlag::Float64`: Maximum time to consider
 - `freqbands::AbstractArray`: Frequency bands over which to compute dv/v
 - `norm::Bool`: Whether or not to normalize signals before dv/v
 
@@ -99,8 +88,8 @@ Windowed cross-correlation following Snieder et al., 2012
 - `dt::AbstractArray`: Time shifts
 - `err::AbstractArray`: Errors in time shift measurements
 """
-function WCC(ref::AbstractArray, cur::AbstractArray, fs::Float64, tmin::Float64,
-             window_length::Float64, window_step::Float64, maxlag::Float64, freqbands::AbstractArray; norm::Bool=true)
+function WCC(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64,
+             window_length::Float64, window_step::Float64, freqbands::AbstractArray; norm::Bool=true)
      # define sampling interval
      dt = 1/fs
 
@@ -148,7 +137,7 @@ function WCC(ref::AbstractArray, cur::AbstractArray, fs::Float64, tmin::Float64,
              ncwt2 = wcwt2[:]
          end
 
-         time_axis, delta_t, cc_max = WCC(ncwt1, ncwt2, fs, tmin, win_len, win_step, tmax)
+         time_axis, delta_t, cc_max = WCC(ncwt2, ncwt1, t, window, fs, window_length, window_step)
          dtt[iband], err[iband] = WCC_dvv(time_axis, delta_t)
      end
 
