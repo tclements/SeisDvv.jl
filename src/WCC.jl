@@ -1,4 +1,4 @@
-export WCC, WCC_dtt, WCC_dvv
+export WCC, WCC_dt
 
 """
 
@@ -26,9 +26,9 @@ Measure dv/v using the windowed cross-correlation following Snieder et al., 2012
 function WCC(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64,
              window_length::Float64, window_step::Float64)
     # measure phase shifts
-    time_axis, delta_t, cc_max = WCC_dtt(ref, cur, t, window, fs, window_length, window_step)
+    time_axis, delta_t, cc_max = WCC_dt(ref, cur, t, window, fs, window_length, window_step)
     # perform linear regression of dt/t=-dv/v
-    dvv, dvv_err, int, int_err, dvv0, dvv0_err = WCC_dvv(time_axis, delta_t)
+    dvv, dvv_err, int, int_err, dvv0, dvv0_err = dvv_lstsq(time_axis, delta_t)
 
     return dvv, dvv_err, int, int_err, dvv0, dvv0_err
 end
@@ -112,8 +112,8 @@ function WCC(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::A
              ncwt2 = wcwt2
          end
 
-         time_axis, delta_t, cc_max = WCC_dtt(ncwt1, ncwt2, t, window, fs, window_length, window_step)
-         dvv[iband], dvv_err[iband], int[iband], int_err[iband], dvv0[iband], dvv0_err[iband] = WCC_dvv(time_axis, delta_t)
+         time_axis, delta_t, cc_max = WCC_dt(ncwt1, ncwt2, t, window, fs, window_length, window_step)
+         dvv[iband], dvv_err[iband], int[iband], int_err[iband], dvv0[iband], dvv0_err[iband] = dvv_lstsq(time_axis, delta_t)
      end
 
      return freqbands, dvv, dvv_err, int, int_err, dvv0, dvv0_err
@@ -121,7 +121,7 @@ end
 
 """
 
-    WCC_dtt(ref, cur, fs, tmin, window_length, window_step)
+    WCC_dt(ref, cur, fs, tmin, window_length, window_step)
 
 Measure phase shifts using the windowed cross-correlation following Snieder et al., 2012
 
@@ -139,7 +139,7 @@ Measure phase shifts using the windowed cross-correlation following Snieder et a
 - `dt::AbstractArray`: Time shifts
 - `cc_max::AbstractArray`: Maximum correlation coefficient for each window
 """
-function WCC_dtt(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64,
+function WCC_dt(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64,
              window_length::Float64, window_step::Float64)
      # create time axis for mwcs
      time_axis = Array(t[window[1]] + window_length / 2. : window_step :
@@ -183,38 +183,4 @@ function WCC_dtt(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, windo
      dt = (cc_max_ind .- window_length_samples)/fs
 
      return time_axis, dt, cc_max
-end
-
-"""
-
-    WCC_dvv(time_axis, dt)
-
-Regress dv/v from dt/t measurements.
-
-# Arguments
-- `time_axis::AbstractArray`: Center times of windows.
-- `dt::AbstractArray`: Time shifts
-
-# Returns
-- `m::Float64`: dv/v for current correlation
-- `em::Float64`: Error for calculation of `m`
-- `a::Float64`: Intercept for regression calculation
-- `ea::Float64`: Error on intercept
-- `m0::Float64`: dv/v for current correlation with no intercept
-- `em0::Float64`: Error for calculation of `m0`
-"""
-function WCC_dvv(time_axis::AbstractArray, dt::AbstractArray)
-    # regress data using least squares
-    model0 = glm(@formula(Y ~0 + X),DataFrame(X=time_axis,Y=dt),Normal(),
-                IdentityLink(),wts=ones(length(time_axis)))
-    model = glm(@formula(Y ~ X),DataFrame(X=time_axis,Y=dt),Normal(),
-                IdentityLink(),wts=ones(length(time_axis)))
-
-    a,m = -coef(model).*100
-    ea, em = stderror(model).*100
-
-    m0 = -coef(model0)[1]*100
-    em0 = stderror(model0)[1]*100
-
-    return m, em, a, ea, m0, em0
 end

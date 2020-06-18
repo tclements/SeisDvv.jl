@@ -1,5 +1,4 @@
-export dtw, dtwdt, dtw_dvv, computeErrorFunction, accumulateErrorFunction, backtrackDistanceFunction, computeDTWerror
-
+export dtw, dtwdt, computeErrorFunction, accumulateErrorFunction, backtrackDistanceFunction, computeDTWerror
 
 """
     dtw(ref, cur, t, window, fs; dtwnorm='L2', maxlag=80, b=1, direction=1)
@@ -35,7 +34,7 @@ function dtw(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::A
     # measure phase shifts
     stbarTime, stbar, dist, error = dtwdt(ref, cur, t, window, fs, maxLag=maxLag, b=b, direction=direction)
     # perform linear regression of dt/t=-dv/v
-    dvv, dvv_err, int, int_err, dvv0, dvv0_err = dtw_dvv(t[window], stbarTime)
+    dvv, dvv_err, int, int_err, dvv0, dvv0_err = dvv_lstsq(t[window], stbarTime)
 
     return dvv, dvv_err, int, int_err, dvv0, dvv0_err
 end
@@ -129,7 +128,7 @@ function dtw(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::A
         # perform dv/v
         stbarTime, stbar, dist, error = dtwdt(ncwt1, ncwt2, t, window, fs, maxLag=maxLag, b=b, direction=direction)
         # perform linear regression
-        dvv[iband], dvv_err[iband], int[iband], int_err[iband], dvv0[iband], dvv0_err[iband] = dtw_dvv(t[window], stbarTime)
+        dvv[iband], dvv_err[iband], int[iband], int_err[iband], dvv0[iband], dvv0_err[iband] = dvv_lstsq(t[window], stbarTime)
     end
 
     return freqbands, dvv, dvv_err, int, int_err, dvv0, dvv0_err
@@ -193,40 +192,6 @@ function dtwdt(u0::AbstractArray, u1::AbstractArray, t::AbstractArray, window::A
     error = computeDTWerror(err, stbar, maxLag)
 
     return stbarTime, stbar, dist, error
-end
-
-
-"""
-    dtw_dvv(time_axis, dt)
-
-Linear regression of phase shifts to time to give dt/t=-dv/v
-
-# Arguments
-- `time_axis::AbstractArray`: Array of lag times
-- `dt::AbstractArray`: Time shifts for each lag time
-
-# Returns
-- `m::Float64`: dt/t for current correlation
-- `em::Float64`: Error for calculation of `m`
-- `a::Float64`: Intercept for regression calculation
-- `ea::Float64`: Error on intercept
-- `m0::Float64`: dt/t for current correlation with no intercept
-- `em0::Float64`: Error for calculation of `m0`
-"""
-function dtw_dvv(time_axis::AbstractArray, dt::AbstractArray)
-    # regress data using least squares
-    model0 = glm(@formula(Y ~0 + X),DataFrame(X=time_axis,Y=dt),Normal(),
-                IdentityLink(),wts=ones(length(time_axis)))
-    model = glm(@formula(Y ~ X),DataFrame(X=time_axis,Y=dt),Normal(),
-                IdentityLink(),wts=ones(length(time_axis)))
-
-    a,m = -coef(model).*100
-    ea, em = stderror(model).*100
-
-    m0 = -coef(model0)[1]*100
-    em0 = stderror(model0)[1]*100
-
-    return m, em, a, ea, m0, em0
 end
 
 """
