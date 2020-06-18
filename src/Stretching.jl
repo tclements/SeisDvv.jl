@@ -244,6 +244,7 @@ function stretching(ref::AbstractArray, cur::AbstractArray, t::AbstractArray,
 
          dvv[iband], cc[iband], cdp[iband], ϵ, err[iband], allC[:,iband] = stretching(ncwt1, ncwt2, t, window, fmin, fmax, dvmin=dvmin, dvmax=dvmax, ntrial=ntrial)
      end
+     ϵ = collect(range(dvmin, stop=dvmax, length=ntrial))
 
      return freqbands, dvv, cc, cdp, ϵ, err, allC
 end
