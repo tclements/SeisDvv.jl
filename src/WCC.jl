@@ -1,8 +1,8 @@
-export WCC, WCC_dt
+export wcc, wcc_dt
 
 """
 
-    WCC(ref, cur, t, window, fs, window_length, window_step)
+    wcc(ref, cur, t, window, fs, window_length, window_step)
 
 Measure dv/v using the windowed cross-correlation following Snieder et al., 2012
 
@@ -23,10 +23,10 @@ Measure dv/v using the windowed cross-correlation following Snieder et al., 2012
 - `dvv0::Float64`: dv/v for current correlation forced through the origin
 - `dvv0_err::Float64`: Error for calculation of dvv0 for a range of frequencies
 """
-function WCC(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64,
+function wcc(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64,
              window_length::Float64, window_step::Float64)
     # measure phase shifts
-    time_axis, delta_t, cc_max = WCC_dt(ref, cur, t, window, fs, window_length, window_step)
+    time_axis, delta_t, cc_max = wcc_dt(ref, cur, t, window, fs, window_length, window_step)
     # perform linear regression of dt/t=-dv/v
     dvv, dvv_err, int, int_err, dvv0, dvv0_err = dvv_lstsq(time_axis, delta_t)
 
@@ -35,7 +35,7 @@ end
 
 """
 
-    WCC(ref, cur, t, window, fs, window_length, window_step, freqbands; norm=true)
+    wcc(ref, cur, t, window, fs, window_length, window_step, freqbands; norm=true)
 
 Measure dv/v over a range of frequencies using the windowed cross-correlation following Snieder et al., 2012
 
@@ -59,7 +59,7 @@ Measure dv/v over a range of frequencies using the windowed cross-correlation fo
 - `dvv0::Float64`: dv/v for current correlation forced through the origin
 - `dvv0_err::Float64`: Error for calculation of dvv0 for a range of frequencies
 """
-function WCC(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64,
+function wcc(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64,
              window_length::Float64, window_step::Float64, freqbands::AbstractArray; norm::Bool=true)
      # define sampling interval
      dt = 1/fs
@@ -112,7 +112,7 @@ function WCC(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::A
              ncwt2 = wcwt2
          end
 
-         time_axis, delta_t, cc_max = WCC_dt(ncwt1, ncwt2, t, window, fs, window_length, window_step)
+         time_axis, delta_t, cc_max = wcc_dt(ncwt1, ncwt2, t, window, fs, window_length, window_step)
          dvv[iband], dvv_err[iband], int[iband], int_err[iband], dvv0[iband], dvv0_err[iband] = dvv_lstsq(time_axis, delta_t)
      end
 
@@ -121,7 +121,7 @@ end
 
 """
 
-    WCC_dt(ref, cur, fs, tmin, window_length, window_step)
+    wcc_dt(ref, cur, fs, tmin, window_length, window_step)
 
 Measure phase shifts using the windowed cross-correlation following Snieder et al., 2012
 
@@ -139,7 +139,7 @@ Measure phase shifts using the windowed cross-correlation following Snieder et a
 - `dt::AbstractArray`: Time shifts
 - `cc_max::AbstractArray`: Maximum correlation coefficient for each window
 """
-function WCC_dt(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64,
+function wcc_dt(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64,
              window_length::Float64, window_step::Float64)
      # create time axis for mwcs
      time_axis = Array(t[window[1]] + window_length / 2. : window_step :
