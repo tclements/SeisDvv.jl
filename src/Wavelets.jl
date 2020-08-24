@@ -2,27 +2,32 @@ export cwt, icwt, wct, wxs
 
 """
 
-    wxs(cur, ref, t, twindow, freqbands, dj)
+    wxs(ref, cur, t, window, freqbands, dj, unwrapflag)
 
-Compute wavelet cross spectrum for two signals and a give array of frequency bands
+Compute wavelet cross spectrum for two signals and a given array of frequency bands
 
 # Arguments
-- `cur::AbstractArray`: Input signal
-- `ref::AbstractArray`: Reference signal
-- `t::AbstractArray`: Time vector
-- `twindow::AbstractArray`: Times over which to compute dv/v
+- `ref::AbstractArray`: Reference time series
+- `cur::AbstractArray`: Current time series
+- `t::AbstractArray`: Time vector common to ref and cur
+- `window::AbstractArray`: Times over which to compute dv/v
+- `fs::Float64`: Sampling frequency
 - `freqbands::AbstractArray`: Frequency bands over which to compute dv/v
 - `dj::AbstractFloat`: Spacing between discrete scales. Default value is 1/12
+- `unwrapflag::Bool`: whether or not to unwrap phase
 
 # Returns
 - `freqbands::AbstractArray`: fmin and fmax for each iteration of the dv/v algorithm
-- `dvv::AbstractArray`: dv/v values for each frequency band
-- `err::AbstractArray`: errors in dv/v measurements
+- `dvv::Float64`: dv/v for current correlation
+- `dvv_err::Float64`: Error for calculation of dv/v
+- `int::Float64`: Intercept for regression calculation
+- `int_err::Float64`: Error for intercept
+- `dvv0::Float64`: dv/v for current correlation forced through the origin
+- `dvv0_err::Float64`: Error for calculation of dvv0
 """
-function wxs(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::AbstractArray, freqbands::AbstractArray; dj::AbstractFloat=1/12, unwrapflag::Bool=false)
-    # define sample frequency
-    dt = mean(diff(t))
-    fs = 1/dt
+function wxs(ref::AbstractArray, cur::AbstractArray, t::AbstractArray, window::AbstractArray, fs::Float64, freqbands::AbstractArray; dj::AbstractFloat=1/12, unwrapflag::Bool=false)
+    # define sample interval
+    dt = 1/fs
 
     # perform wavelet coherence transform
     WXS, WXA, WCT, aWCT, coi, freqs = wct(cur, ref, dt, dj, freqbands)
@@ -43,22 +48,18 @@ function wxs(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::
     # number of frequency bands
     (nbands,_) = size(freqbands)
 
-    # time checks
-    (tmin, tmax) = twindow[:]
-    if tmin < minimum(t) || tmax > maximum(t) || tmax <= tmin
-        println("Error: please input correct time limits in the time window!")
-    else
-        # truncate data with the time window
-        t_ind = findall(x->(x≤tmax && x≥tmin), t)
-        wt = t[t_ind]
-    end
     # dt vector will be filled by regression of phase/frequency, and then
     # will be used to find dv/v by regression of dt/t
-    delta_t = zeros(nbands, length(wt))
-    delta_t_err = zeros(nbands, length(wt))
+    delta_t = zeros(nbands, length(window))
+    delta_t_err = zeros(nbands, length(window))
 
     dvv = zeros(nbands)
-    err = zeros(nbands)
+    dvv_err = similar(dvv)
+    int = similar(dvv)
+    int_err = similar(dvv)
+    dvv0 = similar(dvv)
+    dvv0_err = similar(dvv)
+
     # iterate over frequency bands
     for iband=1:nbands
         (fmin, fmax) = freqbands[iband, :]
@@ -67,12 +68,12 @@ function wxs(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::
             println("Error: please make sure columns 1 and 2 are the correct frequency limits in freqbands!")
         end
         freq_ind = findall(f->(f>=fmin && f<=fmax), freqs)
-        iphase = phase[freq_ind, t_ind]
+        iphase = phase[freq_ind, window]
 
         # get dt by regression of phase delays/frequency band
-        for itime=1:length(wt)
+        for itime=1:length(window)
             if fmin==fmax
-                # simple division instead of regression, since we have only 1 point
+                # simple quotient instead of regression, since we have only 1 point
                 delta_t[iband, itime] = iphase[itime]/(2π*fmax)
             else
                 # get weights
@@ -90,19 +91,17 @@ function wxs(cur::AbstractArray, ref::AbstractArray, t::AbstractArray, twindow::
         end
 
         # regression in time to get time shift
-        w2 = 1 ./ mean(WCT[freq_ind, t_ind], dims=1)
+        w2 = 1 ./ mean(WCT[freq_ind, window], dims=1)
         infNaN =findall(x->(isnan.(x) || isinf.(x)), w2[:])
         if length(infNaN)!=0
             w2[:, infNaN] .= 1.0
         end
 
         # find slope of dt/t to find -dv/v
-        model = glm(@formula(Y ~0 + X),DataFrame(X=wt,Y=delta_t[iband, :]),Normal(),IdentityLink(),wts=w2[:])
-        dvv[iband] = -coef(model)[1]*100
-        err[iband] = stderror(model)[1]*100
+        dvv[iband], dvv_err[iband], int[iband], int_err[iband], dvv0[iband], dvv0_err[iband] = dvv_lstsq(t[window], delta_t[iband, :], w=w2[:])
     end
 
-    return freqbands, dvv, err
+    return freqbands, dvv, dvv_err, int, int_err, dvv0, dvv0_err
 end
 
 """
