@@ -120,9 +120,9 @@ function mwcs(ref::AbstractArray,cur::AbstractArray,fmin::Float64,
     X = fref .* conj.(fcur)
 
     if smoothing_half_win != 0
-        dcur = sqrt.(SeisNoise.smooth(fcur2,half_win=smoothing_half_win))
-        dref = sqrt.(SeisNoise.smooth(fref2,half_win=smoothing_half_win))
-        X = SeisNoise.smooth(X, half_win=smoothing_half_win)
+        dcur = sqrt.(SeisNoise.smooth(fcur2, smoothing_half_win))
+        dref = sqrt.(SeisNoise.smooth(fref2, smoothing_half_win))
+        X = SeisNoise.smooth(X, smoothing_half_win)
     else
         dcur = sqrt.(fcur2)
         dref = sqrt.(fref2)
@@ -241,7 +241,7 @@ function mwcs_dvv(time_axis::AbstractArray, dt::AbstractArray,
     dt, err, coh = dt[tindex], err[tindex], coh[tindex]
     index = intersect(findall(x -> x .<= min_coh,coh),
                       findall(x -> x .>= max_err,err),
-                      findall(x -> abs.(x) .>= max_dt,time_axis))
+                      findall(x -> abs.(x) .>= max_dt,dt))
     dt[index] .= 0.
     err[index] .= 1.
     coh[index] .= 1.
