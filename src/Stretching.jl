@@ -82,10 +82,11 @@ function stretching(ref::AbstractArray, cur::AbstractArray, t::AbstractArray,
     end
 
     wc = π * (fmin + fmax)
-    tmin = t[window][1]
-    tmax = t[window][end]
-    t1 = minimum([tmin,tmax])
-    t2 = maximum([tmin,tmax])
+
+    # Coda window here is assumed to be either one-sided in positive or negative side, or symmetric in both sides.
+    t1 = minimum(abs.(t[window]))
+    t2 = maximum(abs.(t[window]))
+
     err = 100 * (sqrt(1-X^2)/(2*X)*sqrt((6*sqrt(π/2)*T)/(wc^2*(t2^3-t1^3))))
 
     return dvv,cc,cdp,Array(ϵ),err,allC
